@@ -393,7 +393,7 @@ function applyBg() {
   r.setProperty('--bg-dim', BG.dim);
   r.setProperty('--bg-bright', BG.bright);
   r.setProperty('--bg-react', BG.react ? 0.45 : 0);
-  const cols = BG.colors || (cur && cur.pal) || ['#FF4D8D', '#7C5CFF', '#29D3C0'];
+  const cols = BG.colors || (cur && cur.pal) || ['#4A4A52', '#9A9AA4', '#26262C'];
   cols.slice(0, 3).forEach((c, i) => r.setProperty('--g' + (i + 1), c));
   $('backdrop').classList.toggle('grad-on', BG.mode === 'gradient');
   $('backdrop').classList.toggle('anim', !!BG.anim);
@@ -418,7 +418,7 @@ function renderBgDlg() {
   $('bgImagesBox').hidden = BG.mode !== 'images';
   $('bgGradBox').hidden = BG.mode !== 'gradient';
   for (const [id, key, fmt] of BG_RANGES) { $(id).value = BG[key]; $(id + 'V').textContent = fmt(BG[key]); }
-  const cols = BG.colors || (cur && cur.pal) || ['#FF4D8D', '#7C5CFF', '#29D3C0'];
+  const cols = BG.colors || (cur && cur.pal) || ['#4A4A52', '#9A9AA4', '#26262C'];
   ['g1', 'g2', 'g3'].forEach((id, i) => { $(id).value = cols[i]; });
   $('gAuto').classList.toggle('on', !BG.colors);
   $('gAnim').checked = !!BG.anim;
@@ -588,6 +588,7 @@ function showSong() {
   const meta = $('meta');
   meta.classList.remove('swap'); void meta.offsetWidth; meta.classList.add('swap');
   $('title').textContent = cur ? cur.name : 'Linea';
+  if (!cur) $('coverImg').src = 'cube.png'; // пока песен нет — на месте обложки куб
   $('artist').textContent = cur ? cur.artist || 'Неизвестный исполнитель' : 'Добавь песни слева';
   $('dur').textContent = fmtDur(cur ? cur.duration : 0);
   document.title = cur ? `${cur.name} — Linea` : 'Linea';

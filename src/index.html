@@ -26,7 +26,7 @@
   --line:rgba(255,255,255,.11);
   --fg:#F6F5FA;
   --dim:rgba(246,245,250,.62);
-  --a1:#FF4D8D; --a2:#7C5CFF; --a3:#29D3C0; --on-a1:#14060B;
+  --a1:#D4D4DA; --a2:#8B8B95; --a3:#B9B9C2; --on-a1:#111114;
   --bad:#FF5468;
   --display:"Dela Gothic One","Arial Black",system-ui,sans-serif;
   --ui:"Onest","Segoe UI",system-ui,sans-serif;
@@ -66,7 +66,7 @@ kbd{font:700 12px var(--ui);background:var(--glass-2);border:1px solid var(--lin
 /* ---------- библиотека ---------- */
 .side{display:flex;flex-direction:column;gap:10px;min-height:0;padding:14px}
 .brand{display:flex;align-items:center;gap:10px;font:22px var(--display);letter-spacing:-.01em;padding:2px 4px 6px}
-.brand svg{width:34px;height:34px;filter:drop-shadow(0 0 12px color-mix(in srgb,var(--a1) 60%,transparent));transition:filter .6s}
+.brand img{width:34px;height:34px;object-fit:contain}
 .add{position:relative;display:flex;gap:12px;align-items:center;padding:10px;border-radius:16px;border:1.5px dashed rgba(255,255,255,.22);cursor:pointer;transition:border-color .2s,background .2s}
 .add:hover,.add.over{border-color:var(--a1);background:color-mix(in srgb,var(--a1) 10%,transparent)}
 .add .plus{flex:none;width:40px;height:40px;border-radius:12px;background:var(--a1);color:var(--on-a1);display:grid;place-items:center;font:22px var(--display);transition:background .6s}
@@ -97,6 +97,7 @@ kbd{font:700 12px var(--ui);background:var(--glass-2);border:1px solid var(--lin
 .left{display:flex;flex-direction:column;gap:16px;min-width:0}
 .cover{position:relative;width:100%;max-width:min(400px,46vh);aspect-ratio:1;border-radius:28px;overflow:hidden;background:#15151c;transform:scale(calc(1 + var(--kick)*.045));transition:transform .08s linear,box-shadow .6s;box-shadow:0 30px 90px calc(-10px + var(--kick)*30px) color-mix(in srgb,var(--a1) calc(38% + var(--kick)*40%),transparent),0 0 0 1px rgba(255,255,255,.08)}
 .cover img{width:100%;height:100%;object-fit:cover;display:block}
+.cover img[src="cube.png"]{object-fit:contain;padding:18%;box-sizing:border-box}
 .meta.swap>*{animation:rise .6s var(--ease) both}
 .meta.swap>:nth-child(2){animation-delay:.05s}
 .meta h1{font:clamp(24px,2.6vw,36px)/1.08 var(--display);letter-spacing:-.02em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -273,7 +274,7 @@ body.liquid .over{backdrop-filter:blur(6px);background:rgba(6,6,9,.35)}
 
 <div class="app">
   <aside class="side glass" aria-label="Мои песни">
-    <div class="brand"><svg viewBox="0 0 48 48" aria-hidden="true"><rect x="3" y="3" width="42" height="42" rx="13" fill="var(--a1)"/><rect x="11" y="13" width="16" height="4.5" rx="2.25" fill="#fff" opacity=".55"/><rect x="11" y="21.75" width="26" height="4.5" rx="2.25" fill="#fff"/><rect x="11" y="30.5" width="20" height="4.5" rx="2.25" fill="#fff" opacity=".55"/></svg>Linea</div>
+    <div class="brand"><img src="logo.png" alt="">Linea</div>
     <label class="add" id="drop">
       <input type="file" id="file" accept="audio/*,.mp3,.ogg,.wav,.flac,.m4a" multiple>
       <span class="plus">+</span>
