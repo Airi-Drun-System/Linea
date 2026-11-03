@@ -83,10 +83,12 @@ function findFile(dir, name) {
   }
   return null;
 }
-function run(cmd, args, onErr) {
+// whisper.cpp и tar читают пути в кодировке Windows и ломаются на русских буквах (папка пользователя «ЧЕЛ»),
+// поэтому запускаем их из рабочей папки и даём только короткие латинские пути
+function run(cmd, args, onErr, cwd) {
   return new Promise((resolve) => {
     let p;
-    try { p = spawn(cmd, args, { windowsHide: true }); } catch { resolve(-1); return; }
+    try { p = spawn(cmd, args, { windowsHide: true, cwd }); } catch { resolve(-1); return; }
     if (job) job.proc = p;
     let buf = '';
     p.stderr.on('data', (d) => { if (!onErr) return; buf += d; const ls = buf.split(/\r?\n/); buf = ls.pop(); ls.forEach(onErr); });
@@ -134,7 +136,7 @@ async function ensureWhisper(send, signal) {
       fs.mkdirSync(binDir, { recursive: true });
       send('unzip', 0);
       const tar = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe');
-      await run(tar, ['-xf', zip, '-C', binDir]);
+      await run(tar, ['-xf', a.name, '-C', 'bin'], null, dir);
       fs.rmSync(zip, { force: true });
       exe = findFile(binDir, 'whisper-cli.exe');
       if (exe && (await run(exe, ['--version'])) === 0) break;
@@ -153,20 +155,23 @@ ipcMain.handle('whisper:run', async (e, q) => {
   const ctrl = new AbortController();
   job = { ctrl, proc: null };
   const send = (stage, p) => { if (!e.sender.isDestroyed()) e.sender.send('whisper:progress', { stage, p }); };
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'linea-'));
+  const tmp = path.join(W_DIR(), 'job');
+  fs.rmSync(tmp, { recursive: true, force: true });
+  fs.mkdirSync(tmp, { recursive: true });
   try {
-    const { exe, model } = await ensureWhisper(send, ctrl.signal);
-    const input = path.join(tmp, 'in.wav'), base = path.join(tmp, 'out');
-    fs.writeFileSync(input, Buffer.from(wav));
+    const { exe } = await ensureWhisper(send, ctrl.signal);
+    const base = path.join(tmp, 'out');
+    fs.writeFileSync(path.join(tmp, 'in.wav'), Buffer.from(wav));
     const threads = String(Math.max(2, Math.min(8, os.cpus().length - 1)));
     // -dtw даёт точное время каждого слова; -mc 0 не даёт модели зацикливаться на припевах
-    const args = ['-m', model, '-f', input, '-l', lang, '-ojf', '-of', base, '-dtw', 'large.v3.turbo', '-nfa', '-sns', '-mc', '0', '-pp', '-t', threads];
-    const progress = (line) => { const m = line.match(/progress\s*=\s*(\d+)%/); if (m) send('run', Number(m[1]) / 100); };
+    const args = ['-m', MODEL, '-f', 'job/in.wav', '-l', lang, '-ojf', '-of', 'job/out', '-dtw', 'large.v3.turbo', '-nfa', '-sns', '-mc', '0', '-pp', '-t', threads];
+    const tail = []; // последние строки whisper — показать, если он упадёт
+    const progress = (line) => { const m = line.match(/progress\s*=\s*(\d+)%/); if (m) send('run', Number(m[1]) / 100); else if (line.trim()) { tail.push(line.trim()); if (tail.length > 4) tail.shift(); } };
     send('run', 0);
-    let code = await run(exe, args, progress);
-    if (code !== 0 && !ctrl.signal.aborted) { send('cpu', 0); code = await run(exe, [...args, '-ng'], progress); } // видеокарта не завелась — считаем на процессоре
+    let code = await run(exe, args, progress, W_DIR());
+    if (code !== 0 && !ctrl.signal.aborted) { send('cpu', 0); code = await run(exe, [...args, '-ng'], progress, W_DIR()); } // видеокарта не завелась — считаем на процессоре
     if (ctrl.signal.aborted) return null;
-    if (code !== 0 || !fs.existsSync(base + '.json')) throw new Error('Распознавание не получилось.');
+    if (code !== 0 || !fs.existsSync(base + '.json')) throw new Error('Распознавание не получилось (код ' + code + '). ' + tail.slice(-2).join(' | ').slice(0, 300));
     return fs.readFileSync(base + '.json', 'utf8');
   } catch (err) {
     if (ctrl.signal.aborted) return null;
