@@ -10,6 +10,13 @@ app.commandLine.appendSwitch('disable-renderer-backgrounding');
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 
 let win = null;
+// журнал для разбора проблем: рядом с портативным .exe (или в папке данных программы)
+function logLine(...a) {
+  try {
+    const dir = process.env.PORTABLE_EXECUTABLE_DIR || app.getPath('userData');
+    fs.appendFileSync(path.join(dir, 'Linea-log.txt'), `[${new Date().toISOString()}] ${a.map((x) => (typeof x === 'string' ? x : JSON.stringify(x))).join(' ')}\n`);
+  } catch { /* журнал не обязателен */ }
+}
 function createWindow() {
   win = new BrowserWindow({
     width: 1280, height: 800, minWidth: 900, minHeight: 600,
@@ -119,14 +126,16 @@ async function ensureWhisper(send, signal) {
   const dir = W_DIR(), binDir = path.join(dir, 'bin'), model = path.join(dir, MODEL);
   fs.mkdirSync(dir, { recursive: true });
   let exe = findFile(binDir, 'whisper-cli.exe');
-  if (!exe || (await run(exe, ['--version'])) !== 0) {
+  if (!exe || (await run(exe, ['-h'])) !== 0) {
     exe = null;
+    logLine('whisper: ставлю, exe был', exe);
     const rel = await (await net.fetch(REL_API, { headers: UA, signal })).json();
     const assets = (rel && rel.assets) || [];
     const pick = (re) => assets.find((a) => re.test(a.name));
     const gpu = await app.getGPUInfo('basic').catch(() => ({}));
     const nvidia = ((gpu && gpu.gpuDevice) || []).some((d) => d.vendorId === 0x10de);
     // видеокарта NVIDIA: сборка с CUDA (в разы быстрее); иначе — обычная для процессора
+    logLine('whisper: релиз', rel && rel.tag_name, 'файлы', assets.map((a) => a.name), 'nvidia', nvidia);
     const tries = [nvidia && (pick(/^whisper-bin-win-cuda-12[\d.]*-x64\.zip$/) || pick(/^whisper-cublas-12[\d.]*-bin-x64\.zip$/)), pick(/^whisper-bin-x64\.zip$/)].filter(Boolean);
     for (const a of tries) {
       if (!a.browser_download_url.startsWith(REL_PREFIX)) continue;
@@ -136,15 +145,17 @@ async function ensureWhisper(send, signal) {
       fs.mkdirSync(binDir, { recursive: true });
       send('unzip', 0);
       const tar = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe');
-      await run(tar, ['-xf', a.name, '-C', 'bin'], null, dir);
+      const tc = await run(tar, ['-xf', a.name, '-C', 'bin'], null, dir);
       fs.rmSync(zip, { force: true });
       exe = findFile(binDir, 'whisper-cli.exe');
-      if (exe && (await run(exe, ['--version'])) === 0) break;
+      const hc = exe ? await run(exe, ['-h']) : null;
+      logLine('whisper: скачал', a.name, 'tar', tc, 'exe', exe, '-h', hc);
+      if (hc === 0) break;
       exe = null;
     }
     if (!exe) throw new Error('Не получилось поставить распознавание.');
   }
-  if (!fs.existsSync(model)) await download(MODEL_URL, model, (p) => send('model', p), signal);
+  if (!fs.existsSync(model)) { logLine('whisper: качаю модель'); await download(MODEL_URL, model, (p) => send('model', p), signal); logLine('whisper: модель скачана', fs.statSync(model).size); }
   return { exe, model };
 }
 ipcMain.handle('whisper:run', async (e, q) => {
@@ -169,11 +180,14 @@ ipcMain.handle('whisper:run', async (e, q) => {
     const progress = (line) => { const m = line.match(/progress\s*=\s*(\d+)%/); if (m) send('run', Number(m[1]) / 100); else if (line.trim()) { tail.push(line.trim()); if (tail.length > 4) tail.shift(); } };
     send('run', 0);
     let code = await run(exe, args, progress, W_DIR());
+    logLine('whisper: код', code, tail);
     if (code !== 0 && !ctrl.signal.aborted) { send('cpu', 0); code = await run(exe, [...args, '-ng'], progress, W_DIR()); } // видеокарта не завелась — считаем на процессоре
     if (ctrl.signal.aborted) return null;
+    logLine('whisper: итог', code, fs.existsSync(base + '.json'), tail);
     if (code !== 0 || !fs.existsSync(base + '.json')) throw new Error('Распознавание не получилось (код ' + code + '). ' + tail.slice(-2).join(' | ').slice(0, 300));
     return fs.readFileSync(base + '.json', 'utf8');
   } catch (err) {
+    logLine('whisper: ошибка', String((err && err.stack) || err));
     if (ctrl.signal.aborted) return null;
     throw err;
   } finally {
@@ -181,6 +195,7 @@ ipcMain.handle('whisper:run', async (e, q) => {
     fs.rmSync(tmp, { recursive: true, force: true });
   }
 });
+ipcMain.on('log', (_e, m) => logLine('окно:', String(m).slice(0, 2000)));
 ipcMain.handle('whisper:cancel', () => {
   if (!job) return;
   job.ctrl.abort();
@@ -259,7 +274,7 @@ ipcMain.handle('sep:run', async (e, q) => {
       sepJob.worker = w;
       w.on('message', (m) => {
         if (m.p != null) send('run', m.p);
-        else if (m.gpu === false && process.platform === 'win32') send('cpu', 0);
+        else if (m.gpu != null) { logLine('минус: видеокарта', m.gpu); if (m.gpu === false && process.platform === 'win32') send('cpu', 0); }
         else if (m.done) res(m.out);
         else if (m.err) rej(new Error('Не получилось отделить голос: ' + m.err));
       });
@@ -267,6 +282,7 @@ ipcMain.handle('sep:run', async (e, q) => {
       w.on('exit', () => res(null)); // если ответ уже пришёл, это ничего не меняет; иначе — отменили
     });
   } catch (err) {
+    logLine('минус: ошибка', String((err && err.stack) || err));
     if (sepJob && sepJob.ctrl.signal.aborted) return null;
     throw err;
   } finally {
@@ -276,6 +292,6 @@ ipcMain.handle('sep:run', async (e, q) => {
 ipcMain.handle('sep:cancel', () => { if (!sepJob) return; sepJob.ctrl.abort(); if (sepJob.worker) sepJob.worker.terminate(); });
 ipcMain.handle('sep:ready', () => fs.existsSync(SEP_FILE()));
 
-app.whenReady().then(createWindow);
+app.whenReady().then(() => { logLine('Linea запущен', app.getVersion(), process.platform, os.release()); createWindow(); });
 app.on('will-quit', () => globalShortcut.unregisterAll());
 app.on('window-all-closed', () => app.quit());

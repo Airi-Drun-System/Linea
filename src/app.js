@@ -887,7 +887,7 @@ async function aiRun() {
     const json = await window.lnApp.whisper({ wav: await wavOf(song.vox || song.blob), lang: settings.lang });
     if (json == null) return; // отменили
     const lines = whisperToLines(json);
-    if (!lines.length) { toast('Нейросеть не услышала слов в этом треке'); return; }
+    if (!lines.length) { if (window.lnApp.log) window.lnApp.log('whisper без слов: ' + json.length + ' ' + json.slice(0, 1500)); toast('Нейросеть не услышала слов в этом треке'); return; }
     song.lyrics = lines;
     song.lyrOff = 0;
     saveSong(song);
@@ -895,6 +895,7 @@ async function aiRun() {
     renderSongs();
     toast('Готово. Ошибку в строке правь двойным кликом');
   } catch (e) {
+    if (window.lnApp.log) window.lnApp.log(String((e && e.stack) || e));
     toast(String((e && e.message) || e).replace(/^Error invoking remote method '[^']+': (Error: )?/, ''));
   } finally {
     $('loading').hidden = true;
@@ -1066,6 +1067,7 @@ async function sepRun() {
     renderSongs();
     toast('Готово: играет без голоса. Кнопка «Минус» возвращает голос');
   } catch (e) {
+    if (window.lnApp.log) window.lnApp.log(String((e && e.stack) || e));
     toast(String((e && e.message) || e).replace(/^Error invoking remote method '[^']+': (Error: )?/, ''));
   } finally {
     $('loading').hidden = true;
