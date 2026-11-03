@@ -1,5 +1,5 @@
 'use strict';
-const { app, BrowserWindow, ipcMain, net } = require('electron');
+const { app, BrowserWindow, ipcMain, net, globalShortcut, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -9,8 +9,9 @@ const { spawn } = require('child_process');
 app.commandLine.appendSwitch('disable-renderer-backgrounding');
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 
+let win = null;
 function createWindow() {
-  const win = new BrowserWindow({
+  win = new BrowserWindow({
     width: 1280, height: 800, minWidth: 900, minHeight: 600,
     backgroundColor: '#09090D',
     title: 'Linea',
@@ -182,5 +183,94 @@ ipcMain.handle('whisper:cancel', () => {
 });
 ipcMain.handle('whisper:ready', () => fs.existsSync(path.join(W_DIR(), MODEL)) && !!findFile(path.join(W_DIR(), 'bin'), 'whisper-cli.exe'));
 
+// ==================== стрелки везде, как в Soundpad ====================
+// Пока включено, ← и → принадлежат Linea во всех программах: переключают песни, даже если окно свёрнуто
+ipcMain.handle('keys:global', (_e, on) => {
+  globalShortcut.unregister('Left');
+  globalShortcut.unregister('Right');
+  if (!on) return true;
+  const send = (d) => () => { if (win && !win.isDestroyed()) win.webContents.send('keys:step', d); };
+  const ok = globalShortcut.register('Left', send(-1)) && globalShortcut.register('Right', send(1));
+  if (!ok) { globalShortcut.unregister('Left'); globalShortcut.unregister('Right'); }
+  return ok;
+});
+
+// ==================== слова поверх игр ====================
+// прозрачное окно поверх всех окон; клики проходят сквозь него в игру
+let overlay = null;
+const OV_FILE = () => path.join(app.getPath('userData'), 'overlay.json');
+function ovBounds() {
+  try { const b = JSON.parse(fs.readFileSync(OV_FILE(), 'utf8')); if (screen.getAllDisplays().some((d) => b.x >= d.bounds.x - 50 && b.x < d.bounds.x + d.bounds.width && b.y >= d.bounds.y - 50 && b.y < d.bounds.y + d.bounds.height)) return b; } catch { /* первый запуск */ }
+  const wa = screen.getPrimaryDisplay().workArea;
+  return { width: 960, height: 170, x: Math.round(wa.x + (wa.width - 960) / 2), y: wa.y + wa.height - 210 };
+}
+function openOverlay() {
+  if (overlay && !overlay.isDestroyed()) return;
+  overlay = new BrowserWindow({
+    ...ovBounds(), frame: false, transparent: true, resizable: false, movable: true, skipTaskbar: true,
+    alwaysOnTop: true, focusable: false, hasShadow: false, show: false, backgroundColor: '#00000000',
+    webPreferences: { preload: path.join(__dirname, 'preload-overlay.js'), contextIsolation: true, nodeIntegration: false, sandbox: true, backgroundThrottling: false },
+  });
+  overlay.setAlwaysOnTop(true, 'screen-saver');
+  overlay.setIgnoreMouseEvents(true);
+  overlay.loadFile(path.join(__dirname, 'src', 'overlay.html'));
+  overlay.once('ready-to-show', () => overlay.showInactive());
+  overlay.on('moved', () => { try { fs.writeFileSync(OV_FILE(), JSON.stringify(overlay.getBounds())); } catch { /* не страшно */ } });
+  overlay.on('closed', () => { overlay = null; });
+}
+ipcMain.handle('overlay:set', (_e, q) => {
+  if (!q || !q.on) { if (overlay) overlay.close(); return; }
+  openOverlay();
+  // режим «подвинуть»: окно ловит мышь, его можно тащить; потом снова сквозное
+  const move = !!q.move;
+  overlay.setIgnoreMouseEvents(!move);
+  overlay.setFocusable(move);
+  overlay.webContents.send('overlay:move', move);
+});
+ipcMain.on('overlay:state', (_e, st) => { if (overlay && !overlay.isDestroyed()) overlay.webContents.send('overlay:state', st); });
+
+// ==================== отделение голоса (модель HTDemucs, качается один раз) ====================
+const { Worker } = require('worker_threads');
+const SEP_URL = 'https://huggingface.co/timcsy/demucs-web-onnx/resolve/main/htdemucs_embedded.onnx';
+const SEP_FILE = () => path.join(app.getPath('userData'), 'demucs', 'htdemucs_embedded.onnx');
+let sepJob = null;
+ipcMain.handle('sep:run', async (e, q) => {
+  if (sepJob) throw new Error('Уже отделяю голос у другой песни.');
+  const { left, right } = q || {};
+  if (!(left instanceof Float32Array) || !(right instanceof Float32Array) || left.length !== right.length || left.length > 44100 * 60 * 20) throw new Error('Не тот звук.');
+  const send = (stage, p) => { if (!e.sender.isDestroyed()) e.sender.send('sep:progress', { stage, p }); };
+  sepJob = { worker: null, ctrl: new AbortController() };
+  try {
+    const f = SEP_FILE();
+    if (!fs.existsSync(f)) {
+      fs.mkdirSync(path.dirname(f), { recursive: true });
+      await download(SEP_URL, f, (p) => send('model', p), sepJob.ctrl.signal);
+    }
+    send('run', 0);
+    // поток лежит рядом с распакованным onnxruntime, а не внутри app.asar
+    const script = path.join(__dirname, 'sep', 'worker.js').replace('app.asar', 'app.asar.unpacked');
+    return await new Promise((res, rej) => {
+      const w = new Worker(script, { workerData: { model: f, left, right } });
+      sepJob.worker = w;
+      w.on('message', (m) => {
+        if (m.p != null) send('run', m.p);
+        else if (m.gpu === false && process.platform === 'win32') send('cpu', 0);
+        else if (m.done) res(m.out);
+        else if (m.err) rej(new Error('Не получилось отделить голос: ' + m.err));
+      });
+      w.on('error', rej);
+      w.on('exit', () => res(null)); // если ответ уже пришёл, это ничего не меняет; иначе — отменили
+    });
+  } catch (err) {
+    if (sepJob && sepJob.ctrl.signal.aborted) return null;
+    throw err;
+  } finally {
+    sepJob = null;
+  }
+});
+ipcMain.handle('sep:cancel', () => { if (!sepJob) return; sepJob.ctrl.abort(); if (sepJob.worker) sepJob.worker.terminate(); });
+ipcMain.handle('sep:ready', () => fs.existsSync(SEP_FILE()));
+
 app.whenReady().then(createWindow);
+app.on('will-quit', () => globalShortcut.unregisterAll());
 app.on('window-all-closed', () => app.quit());

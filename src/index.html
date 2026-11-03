@@ -242,6 +242,10 @@ body.liquid .card.lg{background:rgba(20,20,28,.42)}
 body.liquid .menu.lg{background:rgba(20,20,28,.5)}
 body.liquid .over{backdrop-filter:blur(6px);background:rgba(6,6,9,.35)}
 
+.card h4{margin:6px 0 -4px;font:800 12px var(--ui);letter-spacing:.08em;text-transform:uppercase;color:var(--dim)}
+.ovRow{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.mode.kar{padding:0 12px}
+
 /* окна */
 .over{position:fixed;inset:0;display:grid;place-items:center;padding:16px;background:rgba(6,6,9,.6);backdrop-filter:blur(14px);animation:fade .25s both;z-index:5}
 .card{background:rgba(22,22,30,.86);border:1px solid var(--line);border-radius:28px;padding:28px;width:min(560px,100%);display:flex;flex-direction:column;gap:14px;animation:pop .45s var(--spring) both;box-shadow:0 40px 100px rgba(0,0,0,.5)}
@@ -285,7 +289,7 @@ body.liquid .over{backdrop-filter:blur(6px);background:rgba(6,6,9,.35)}
     <header class="top">
       <button class="pill" id="libBtn">Песни</button>
       <span class="grow"></span>
-      <button class="pill" id="bgBtn">Фон</button>
+      <button class="pill" id="bgBtn">Настройки</button>
       <button class="pill ai" id="aiBtn">Распознать слова</button>
       <span class="offs" id="offs" hidden title="Если слова спешат или опаздывают"><button id="offM" aria-label="Слова раньше">−</button><b id="offV">0.0 с</b><button id="offP" aria-label="Слова позже">+</button></span>
       <button class="pill" id="findLrc">Найти слова</button>
@@ -308,6 +312,7 @@ body.liquid .over{backdrop-filter:blur(6px);background:rgba(6,6,9,.35)}
           <button class="mode" id="rep" aria-pressed="false" title="Повторять песню"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h10v3l4-4-4-4v3H5v6h2zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2z"/></svg><i>1</i></button>
           <label class="vol"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9zm12.5 3a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4z"/></svg><input type="range" id="vol" min="0" max="1" step="0.05" aria-label="Громкость"></label>
           <button class="mode spd" id="spd" title="Скорость">Обычная</button>
+          <button class="mode kar pcOnly" id="kar" aria-pressed="false" title="Убрать голос из песни (нейросеть)">Минус</button>
         </div>
         <p class="up" id="up"></p>
         <div class="syncBar" id="syncBar" hidden><button class="main" id="syncTap">Строка!</button><button id="syncUndo">Назад</button><button id="syncStop">Отмена</button></div>
@@ -359,9 +364,20 @@ body.liquid .over{backdrop-filter:blur(6px);background:rgba(6,6,9,.35)}
 
 <div class="menu" id="menu" role="menu" hidden></div>
 
+<div class="over" id="sepDlg" hidden>
+  <div class="card">
+    <h3>Убрать голос</h3>
+    <p>Нейросеть разберёт песню на голос и музыку. Получится минус — можно петь самому под слова. А распознавание слов потом пойдёт по чистому голосу и будет точнее.</p>
+    <p id="sepFirst">В первый раз скачается нейросеть, около 170 МБ.</p>
+    <p>Считает видеокарта, на песню обычно уходит около минуты.</p>
+    <div class="acts"><button class="main" id="sepGo">Убрать голос</button><button id="sepCancel">Отмена</button></div>
+  </div>
+</div>
+
 <div class="over" id="bgDlg" hidden>
   <div class="card bgCard">
-    <h3>Фон и вид</h3>
+    <h3>Настройки</h3>
+    <h4>Фон</h4>
     <div class="seg" id="bgMode"><button data-m="cover">Обложка песни</button><button data-m="images">Свои картинки</button><button data-m="gradient">Градиент</button></div>
     <div id="bgImagesBox">
       <div class="thumbs" id="bgThumbs"></div>
@@ -376,6 +392,10 @@ body.liquid .over{backdrop-filter:blur(6px);background:rgba(6,6,9,.35)}
     <label class="rng"><span>Яркость <b id="bgBrightV"></b></span><input type="range" id="bgBright" min="0.5" max="1.5" step="0.05"></label>
     <label class="chk"><input type="checkbox" id="bgReact"><span></span>Фон дышит под бас</label>
     <div class="acts"><button id="bgSong">Своя картинка для этой песни</button></div>
+    <h4>Вид и звук</h4>
+    <label class="field">Плавный переход между песнями<select id="xfSel"><option value="0">Выключен</option><option value="3">3 секунды</option><option value="6">6 секунд</option><option value="10">10 секунд</option></select></label>
+    <label class="chk pcOnly"><input type="checkbox" id="keysG"><span></span>Стрелки ← → переключают песни везде, даже в других программах и играх</label>
+    <div class="ovRow pcOnly"><label class="chk"><input type="checkbox" id="ovOn"><span></span>Слова поверх игр</label><button class="chipB" id="ovMove" hidden>Подвинуть</button></div>
     <label class="field">Стекло<select id="glassSel"><option value="liquid">Жидкое: преломляет фон, как линза</option><option value="plain">Обычное: размытое, легче для слабых компьютеров</option></select></label>
     <div class="acts"><button class="main" id="bgClose">Готово</button></div>
   </div>

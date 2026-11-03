@@ -8,4 +8,12 @@ contextBridge.exposeInMainWorld('lnApp', {
   whisperCancel: () => ipcRenderer.invoke('whisper:cancel'),
   whisperReady: () => ipcRenderer.invoke('whisper:ready'),
   onWhisper: (fn) => ipcRenderer.on('whisper:progress', (_e, d) => fn(d)),
+  globalKeys: (on) => ipcRenderer.invoke('keys:global', on),
+  onStep: (fn) => ipcRenderer.on('keys:step', (_e, d) => fn(d)),
+  overlay: (q) => ipcRenderer.invoke('overlay:set', q),
+  overlayState: (st) => ipcRenderer.send('overlay:state', st),
+  separate: (q) => ipcRenderer.invoke('sep:run', q),
+  sepCancel: () => ipcRenderer.invoke('sep:cancel'),
+  sepReady: () => ipcRenderer.invoke('sep:ready'),
+  onSep: (fn) => ipcRenderer.on('sep:progress', (_e, d) => fn(d)),
 });

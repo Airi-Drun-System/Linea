@@ -156,8 +156,19 @@ function songImage(song) {
 const songs = [];
 let cur = null; // песня, которая играет
 let query = '';
-const audio = new Audio();
-audio.volume = settings.volume;
+const decks = [new Audio(), new Audio()];
+let audio = decks[0]; // та, что играет сейчас
+const deckUrl = new Map(), deckGain = new Map();
+decks.forEach((d) => { d.volume = settings.volume; d.preservesPitch = false; });
+function setSrc(el, blob) {
+  const old = deckUrl.get(el);
+  if (old) URL.revokeObjectURL(old);
+  const u = URL.createObjectURL(blob);
+  deckUrl.set(el, u);
+  el.src = u;
+}
+// минус (без голоса), если он уже сделан и включён
+const srcOf = (s) => (settings.karaoke && s.inst ? s.inst : s.blob);
 
 const saveSong = (song) => { const { img, imgUrl, imgPromise, bgUrl, ...rec } = song; DB.put(rec); };
 const lyricsOf = (s) => (s && s.lyrics && s.lyrics.length ? s.lyrics : null);
@@ -413,6 +424,12 @@ function renderBgDlg() {
   $('gAnim').checked = !!BG.anim;
   $('bgReact').checked = !!BG.react;
   $('glassSel').value = settings.glass || 'liquid';
+  $('xfSel').value = String(settings.xfade || 0);
+  $('keysG').checked = settings.globalKeys !== false;
+  $('ovOn').checked = !!settings.overlay;
+  $('ovMove').hidden = !settings.overlay;
+  $('ovMove').textContent = ovMove ? 'Готово' : 'Подвинуть';
+  document.querySelectorAll('.pcOnly').forEach((el) => { el.hidden = !window.lnApp; });
   $('bgSong').textContent = cur && cur.bg ? 'Убрать картинку этой песни' : 'Своя картинка для этой песни';
   $('bgSong').disabled = !cur;
   const box = $('bgThumbs');
@@ -469,6 +486,10 @@ $('bgSongFile').addEventListener('change', (e) => {
   saveSong(cur); applyBg(); renderBgDlg();
 });
 $('glassSel').addEventListener('change', () => { settings.glass = $('glassSel').value; saveSettings(); lgRefresh(); });
+$('xfSel').addEventListener('change', () => { settings.xfade = Number($('xfSel').value); saveSettings(); });
+$('keysG').addEventListener('change', () => setGlobalKeys($('keysG').checked));
+$('ovOn').addEventListener('change', () => { settings.overlay = $('ovOn').checked; saveSettings(); ovMove = false; ovApply(); renderBgDlg(); });
+$('ovMove').addEventListener('click', () => { ovMove = !ovMove; ovApply(); renderBgDlg(); });
 
 // ==================== жидкое стекло ====================
 // Панель преломляет то, что под ней: у краёв фон «затягивает», как в линзе, с лёгкой радугой.
@@ -529,22 +550,32 @@ function lgRefresh() {
 }
 lgRefresh();
 // ==================== воспроизведение ====================
-let actx = null, analyser = null, freq = null, url = '';
+let actx = null, analyser = null, freq = null;
 const PATH = { play: 'M8 5v14l11-7z', pause: 'M6 5h4v14H6zM14 5h4v14h-4z' };
-function play() {
+function play(fadeIn) {
   if (!cur) { if (songs[0]) load(songs[0], true); return; }
-  // анализатор баса для обложки: подключаем один раз, после первого нажатия
+  // анализатор баса для обложки и громкость каждой деки: подключаем один раз, после первого нажатия
   if (!actx) {
     actx = new AudioContext();
     analyser = actx.createAnalyser();
     analyser.fftSize = 256;
     analyser.smoothingTimeConstant = 0.7;
     freq = new Uint8Array(analyser.frequencyBinCount);
-    actx.createMediaElementSource(audio).connect(analyser);
+    decks.forEach((d) => { const g = actx.createGain(); actx.createMediaElementSource(d).connect(g); g.connect(analyser); deckGain.set(d, g); });
     analyser.connect(actx.destination);
   }
   if (actx.state === 'suspended') actx.resume();
+  const g = deckGain.get(audio).gain, now = actx.currentTime;
+  g.cancelScheduledValues(now);
+  if (fadeIn) { g.setValueAtTime(0, now); g.linearRampToValueAtTime(1, now + settings.xfade); } else g.setValueAtTime(1, now);
   audio.play().catch(() => {});
+}
+function fadeOut(d) {
+  const g = deckGain.get(d).gain, now = actx.currentTime;
+  g.cancelScheduledValues(now);
+  g.setValueAtTime(g.value, now);
+  g.linearRampToValueAtTime(0, now + settings.xfade);
+  setTimeout(() => { if (d !== audio) d.pause(); }, settings.xfade * 1000 + 80);
 }
 const toggle = () => (audio.paused ? play() : audio.pause());
 function applyPalette(song) {
@@ -572,18 +603,22 @@ function upText() {
 }
 async function load(song, autoplay) {
   if (sync) syncDone(false);
+  // плавный переход: старая песня затихает на своей деке, новая нарастает на другой
+  const fade = !!(autoplay && actx && settings.xfade && cur && cur !== song && !audio.paused);
+  const other = decks[decks[0] === audio ? 1 : 0];
+  if (fade) { fadeOut(audio); audio = other; } else other.pause();
+  xfading = false;
   cur = song;
   store.set('ln.last', song.id);
-  if (url) URL.revokeObjectURL(url);
-  url = URL.createObjectURL(song.blob);
-  audio.src = url;
+  setSrc(audio, srcOf(song));
   audio.defaultPlaybackRate = audio.playbackRate = SPEEDS[settings.speed || 0][0];
   audio.preservesPitch = false; // sped up и slowed как в тиктоке: вместе с темпом меняется и тон
   showSong(); upText(); renderSongs();
   if (slideDir) { const c = document.querySelector('.cover'); c.classList.remove('inNext', 'inPrev'); void c.offsetWidth; c.classList.add(slideDir > 0 ? 'inNext' : 'inPrev'); slideDir = 0; }
   waveDirty = true;
   if (!song.wave) waveOf(song);
-  if (autoplay) play();
+  if (autoplay) play(fade);
+  showModes();
   await songImage(song);
   if (cur !== song) return;
   applyPalette(song);
@@ -610,20 +645,28 @@ function step(d) {
 }
 function setVolume(v) {
   settings.volume = Math.round(Math.max(0, Math.min(1, v)) * 20) / 20;
-  audio.volume = settings.volume;
+  decks.forEach((d) => { d.volume = settings.volume; });
   $('vol').value = settings.volume;
   $('vol').style.setProperty('--pos', settings.volume * 100 + '%');
   saveSettings();
 }
-audio.addEventListener('play', () => { $('play').querySelector('path').setAttribute('d', PATH.pause); $('play').ariaLabel = 'Пауза'; });
-audio.addEventListener('pause', () => { $('play').querySelector('path').setAttribute('d', PATH.play); $('play').ariaLabel = 'Играть'; });
-audio.addEventListener('ended', () => {
+// события слушаем у обеих дек, но реагируем только на текущую
+const onDeck = (ev, fn) => decks.forEach((d) => d.addEventListener(ev, (e) => { if (e.target === audio) fn(e); }));
+let xfading = false;
+onDeck('play', () => { $('play').querySelector('path').setAttribute('d', PATH.pause); $('play').ariaLabel = 'Пауза'; });
+onDeck('pause', () => { $('play').querySelector('path').setAttribute('d', PATH.play); $('play').ariaLabel = 'Играть'; });
+// за несколько секунд до конца начинаем следующую — получается переход без тишины
+onDeck('timeupdate', () => {
+  if (!settings.xfade || settings.repeat || sync || xfading || !audio.duration || audio.paused) return;
+  if ((audio.duration - audio.currentTime) / audio.playbackRate <= settings.xfade) { xfading = true; step(1); }
+});
+onDeck('ended', () => {
   if (!sync && settings.repeat) { audio.currentTime = 0; play(); return; }
   if (!sync) return step(1);
   // песня кончилась посреди разметки: сохраняем то, что успели
   if (sync.i) { sync.lines.length = sync.i; syncDone(true); } else syncDone(false);
 });
-audio.addEventListener('error', () => { if (cur) toast('Этот файл не играет. Попробуй mp3.'); });
+onDeck('error', () => { if (cur) toast('Этот файл не играет. Попробуй mp3.'); });
 // медиа-клавиши клавиатуры и наушников: работают и в свёрнутом окне
 if ('mediaSession' in navigator) {
   for (const [a, f] of [['play', play], ['pause', () => audio.pause()], ['previoustrack', () => step(-1)], ['nexttrack', () => step(1)]]) {
@@ -840,7 +883,7 @@ async function aiRun() {
   showLoading('Готовлю звук', song.name, 0);
   $('loadActs').hidden = false;
   try {
-    const json = await window.lnApp.whisper({ wav: await wavOf(song.blob), lang: settings.lang });
+    const json = await window.lnApp.whisper({ wav: await wavOf(song.vox || song.blob), lang: settings.lang });
     if (json == null) return; // отменили
     const lines = whisperToLines(json);
     if (!lines.length) { toast('Нейросеть не услышала слов в этом треке'); return; }
@@ -861,7 +904,8 @@ $('aiBtn').addEventListener('click', aiOpen);
 $('emptyAi').addEventListener('click', aiOpen);
 $('aiGo').addEventListener('click', aiRun);
 $('aiCancel').addEventListener('click', () => { $('aiDlg').hidden = true; });
-$('loadCancel').addEventListener('click', () => window.lnApp.whisperCancel());
+let cancelJob = null;
+$('loadCancel').addEventListener('click', () => (cancelJob ? cancelJob() : window.lnApp.whisperCancel()));
 
 
 // ==================== волна, скорость, режимы, сдвиг слов ====================
@@ -905,11 +949,14 @@ function showModes() {
   $('spd').textContent = sp[1];
   $('spd').classList.toggle('on', sp[0] !== 1);
   $('shuf').ariaPressed = String(!!settings.shuffle);
+  $('kar').ariaPressed = String(!!(settings.karaoke && cur && cur.inst));
+  $('kar').hidden = !(window.lnApp && window.lnApp.separate);
+  $('kar').title = cur && cur.inst ? 'Минус: песня без голоса' : 'Убрать голос из песни (нейросеть)';
   $('rep').ariaPressed = String(!!settings.repeat);
 }
 $('spd').addEventListener('click', () => {
   settings.speed = ((settings.speed || 0) + 1) % SPEEDS.length;
-  audio.defaultPlaybackRate = audio.playbackRate = SPEEDS[settings.speed][0];
+  decks.forEach((d) => { d.defaultPlaybackRate = d.playbackRate = SPEEDS[settings.speed][0]; });
   saveSettings(); showModes();
 });
 $('shuf').addEventListener('click', () => { settings.shuffle = !settings.shuffle; saveSettings(); showModes(); upText(); });
@@ -940,6 +987,107 @@ $('offM').addEventListener('click', () => shiftLyrics(-100));
 $('offP').addEventListener('click', () => shiftLyrics(100));
 showModes();
 
+
+// ==================== стрелки везде, оверлей со словами ====================
+async function setGlobalKeys(on, quiet) {
+  settings.globalKeys = on;
+  saveSettings();
+  if (!window.lnApp || !window.lnApp.globalKeys) return;
+  const ok = await window.lnApp.globalKeys(on);
+  if (on && !ok && !quiet) toast('Стрелки уже заняты другой программой');
+}
+if (window.lnApp && window.lnApp.onStep) window.lnApp.onStep((d) => step(d));
+
+let ovMove = false, ovLast = '';
+function ovApply() { if (window.lnApp && window.lnApp.overlay) window.lnApp.overlay({ on: !!settings.overlay, move: ovMove }); }
+// раз в 80 мс шлём оверлею строку: таймер работает, даже когда окно плеера свёрнуто
+setInterval(() => {
+  if (!settings.overlay || !window.lnApp || !window.lnApp.overlayState) return;
+  const L = lyricsOf(cur);
+  let st = { i: -1, text: '' };
+  if (L && !audio.paused) {
+    const lt = audio.currentTime * 1000 - (cur.lyrOff || 0), i = lineAt(L, lt);
+    if (i >= 0) {
+      const l = L[i], nx = L.slice(i + 1).find((x) => x.text);
+      st = { i, text: l.text, next: nx ? nx.text : '', color: (cur.pal || [])[0] };
+      if (l.words) { st.words = l.words.map((w) => w.text); st.sung = l.words.filter((w) => w.t <= lt).length; }
+      else { const end = i + 1 < L.length ? L[i + 1].t : l.t + 4000; st.p = Math.min(1, (lt - l.t) / Math.max(400, Math.min(end - l.t, 7000) * 0.85)); }
+    }
+  }
+  const key = JSON.stringify(st);
+  if (key !== ovLast) { ovLast = key; window.lnApp.overlayState(st); }
+}, 80);
+
+// ==================== минус: нейросеть отделяет голос ====================
+function wav16(chans, sr) {
+  const n = chans[0].length, ch = chans.length, v = new DataView(new ArrayBuffer(44 + n * ch * 2));
+  const str = (o, x) => { for (let i = 0; i < x.length; i++) v.setUint8(o + i, x.charCodeAt(i)); };
+  str(0, 'RIFF'); v.setUint32(4, 36 + n * ch * 2, true); str(8, 'WAVEfmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true);
+  v.setUint16(22, ch, true); v.setUint32(24, sr, true); v.setUint32(28, sr * ch * 2, true); v.setUint16(32, ch * 2, true); v.setUint16(34, 16, true);
+  str(36, 'data'); v.setUint32(40, n * ch * 2, true);
+  let o = 44;
+  for (let i = 0; i < n; i++) for (let c = 0; c < ch; c++) { v.setInt16(o, Math.max(-1, Math.min(1, chans[c][i])) * 32767, true); o += 2; }
+  return new Blob([v.buffer], { type: 'audio/wav' });
+}
+const SEP_STAGE = {
+  model: ['Скачиваю нейросеть', 'Один раз, около 170 МБ.'],
+  run: ['Убираю голос', 'Нейросеть разбирает песню на голос и музыку.'],
+  cpu: ['Убираю голос', 'Видеокарта не подошла, считаю на процессоре. Будет медленнее.'],
+};
+if (window.lnApp && window.lnApp.onSep) window.lnApp.onSep(({ stage, p }) => { const [a, b] = SEP_STAGE[stage] || SEP_STAGE.run; showLoading(a, b, p); });
+async function sepOpen() {
+  if (!cur || !window.lnApp || !window.lnApp.separate) return;
+  $('sepFirst').hidden = await window.lnApp.sepReady().catch(() => false);
+  $('sepDlg').hidden = false;
+}
+async function sepRun() {
+  const song = cur;
+  $('sepDlg').hidden = true;
+  showLoading('Готовлю звук', song.name, 0);
+  $('loadActs').hidden = false;
+  cancelJob = () => window.lnApp.sepCancel();
+  try {
+    const buf = await new OfflineAudioContext(2, 1, 44100).decodeAudioData(await song.blob.arrayBuffer());
+    const left = buf.getChannelData(0), right = buf.numberOfChannels > 1 ? buf.getChannelData(1) : left;
+    const out = await window.lnApp.separate({ left, right });
+    if (!out) return; // отменили
+    showLoading('Сохраняю', 'Минус и голос отдельно.', 1);
+    song.inst = wav16([out.iL, out.iR], 44100);
+    // голос в 16 кГц моно: по нему нейросеть точнее распознаёт слова
+    const vb = new AudioBuffer({ length: out.vox.length, sampleRate: 44100, numberOfChannels: 1 });
+    vb.copyToChannel(out.vox, 0);
+    const oc = new OfflineAudioContext(1, Math.ceil(out.vox.length * 16000 / 44100), 16000), src = oc.createBufferSource();
+    src.buffer = vb; src.connect(oc.destination); src.start();
+    song.vox = wav16([(await oc.startRendering()).getChannelData(0)], 16000);
+    saveSong(song);
+    settings.karaoke = true; saveSettings();
+    if (song === cur) reloadSrc();
+    renderSongs();
+    toast('Готово: играет без голоса. Кнопка «Минус» возвращает голос');
+  } catch (e) {
+    toast(String((e && e.message) || e).replace(/^Error invoking remote method '[^']+': (Error: )?/, ''));
+  } finally {
+    $('loading').hidden = true;
+    $('loadActs').hidden = true;
+    cancelJob = null;
+  }
+}
+// переключить оригинал/минус на ходу, с того же места
+function reloadSrc() {
+  const t = audio.currentTime, was = !audio.paused;
+  setSrc(audio, srcOf(cur));
+  audio.addEventListener('loadedmetadata', () => { audio.currentTime = t; if (was) play(); }, { once: true });
+  showModes();
+}
+$('kar').addEventListener('click', () => {
+  if (!cur) return;
+  if (!cur.inst) { sepOpen(); return; }
+  settings.karaoke = !settings.karaoke;
+  saveSettings();
+  reloadSrc();
+});
+$('sepGo').addEventListener('click', sepRun);
+$('sepCancel').addEventListener('click', () => { $('sepDlg').hidden = true; });
 // ==================== кадр: перемотка, бас, строка ====================
 function frame() {
   requestAnimationFrame(frame);
@@ -1009,6 +1157,7 @@ addEventListener('keydown', (e) => {
   if (e.target.isContentEditable) return;
   if (!$('menu').hidden && e.code === 'Escape') { hideMenu(); return; }
   if (!$('nameDlg').hidden) return;
+  if (!$('sepDlg').hidden) { if (e.code === 'Escape') $('sepDlg').hidden = true; return; }
   if (!$('bgDlg').hidden) { if (e.code === 'Escape') $('bgDlg').hidden = true; return; }
   if (!$('aiDlg').hidden) { if (e.code === 'Escape') $('aiDlg').hidden = true; return; }
   if (!$('findDlg').hidden) { if (e.code === 'Escape') $('findDlg').hidden = true; return; }
@@ -1032,6 +1181,9 @@ addEventListener('keydown', (e) => {
 // ==================== старт ====================
 (async () => {
   setVolume(settings.volume);
+  decks.forEach((d) => { d.defaultPlaybackRate = d.playbackRate = SPEEDS[settings.speed || 0][0]; });
+  if (window.lnApp && window.lnApp.globalKeys) setGlobalKeys(settings.globalKeys !== false, true);
+  ovApply();
   bgImgs = (await DB.bgs.all()).sort((a, b) => a.added - b.added).map((r) => ({ ...r, url: URL.createObjectURL(r.blob) }));
   applyBg();
   songs.push(...(await DB.all()).sort((a, b) => b.added - a.added));
