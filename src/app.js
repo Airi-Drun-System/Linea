@@ -329,7 +329,7 @@ if ('mediaSession' in navigator) {
 }
 
 // ==================== слова ====================
-let lineIdx = -2, sync = null, seeking = false, lastCur = '', kick = 0, bassAvg = 0;
+let lineIdx = -2, sungN = -1, editing = false, sync = null, seeking = false, lastCur = '', kick = 0, bassAvg = 0;
 const searching = new Set();
 function renderLines() {
   const box = $('lines');
@@ -340,20 +340,56 @@ function renderLines() {
   $('emptyTitle').textContent = !cur ? 'Песен пока нет' : searching.has(cur.id) ? 'Ищу слова…' : 'У песни пока нет слов';
   $('emptyText').textContent = !cur ? 'Перетащи mp3 в окно или нажми «Добавить песни». Слова к известным песням найдутся сами.'
     : searching.has(cur.id) ? 'Смотрю на lrclib.net: там слова с таймингами для кучи песен.'
+    : window.lnApp ? 'В базе слов нет. Нажми «Распознать нейросетью»: она сама послушает трек и запишет слова с таймингами. Подойдёт и для мешапов.'
     : cur.plain ? 'Нашёлся текст, но без таймингов. Разметь его: песня играет, а ты жмёшь пробел на каждой новой строке. Минута работы.'
     : 'Вставь текст песни и разметь его: песня играет, а ты жмёшь пробел, когда начинается каждая строка. Минута работы.';
   $('emptyActs').hidden = !cur || searching.has(cur.id);
   $('emptyFind').hidden = !window.lnApp;
   $('findLrc').hidden = !window.lnApp;
+  $('aiBtn').hidden = $('emptyAi').hidden = !(window.lnApp && window.lnApp.whisper);
   lines.forEach((l) => {
     const el = document.createElement('div');
-    el.className = 'ln' + (l.text ? '' : ' gap');
-    el.textContent = l.text || '• • •';
-    if (!sync) el.addEventListener('click', () => { audio.currentTime = Math.max(0, l.t / 1000); if (audio.paused) play(); });
+    el.className = 'ln' + (l.text ? '' : ' gap') + (l.words ? ' wl' : '');
+    if (l.words) l.words.forEach((w, k) => { const sp = document.createElement('span'); sp.className = 'w'; sp.textContent = (k ? ' ' : '') + w.text; el.appendChild(sp); });
+    else el.textContent = l.text || '• • •';
+    if (!sync) {
+      el.addEventListener('click', () => { if (el.isContentEditable) return; audio.currentTime = Math.max(0, l.t / 1000); if (audio.paused) play(); });
+      el.addEventListener('dblclick', () => editLine(el, l));
+    }
     box.appendChild(el);
   });
   box.style.transform = '';
   lineIdx = -2;
+  sungN = -1;
+}
+// ошибся распознаватель — двойной клик по строке, правишь текст, Enter; время слов сохраняется
+function editLine(el, l) {
+  if (editing) return;
+  editing = true;
+  const song = cur, L = song.lyrics, i = L.indexOf(l);
+  el.textContent = l.text;
+  el.contentEditable = 'true';
+  el.focus();
+  getSelection().selectAllChildren(el);
+  const finish = (save) => {
+    el.removeEventListener('keydown', onKey);
+    el.removeEventListener('blur', onBlur);
+    editing = false;
+    if (save && song === cur && i >= 0) {
+      const text = el.textContent.replace(/\s+/g, ' ').trim();
+      if (!text) L.splice(i, 1);
+      else if (text !== l.text) L[i] = retextLine(l, text, L[i + 1] && L[i + 1].t);
+      saveSong(song);
+    }
+    renderLines();
+  };
+  const onKey = (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+    else if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+  };
+  const onBlur = () => finish(true);
+  el.addEventListener('keydown', onKey);
+  el.addEventListener('blur', onBlur);
 }
 // слова с таймингами — с lrclib.net (только в программе для Windows)
 async function findLyrics(song, quiet) {
@@ -436,6 +472,71 @@ $('syncTap').addEventListener('click', () => sync && syncTap());
 $('syncUndo').addEventListener('click', () => sync && syncUndo());
 $('syncStop').addEventListener('click', () => sync && syncDone(false));
 
+
+// ==================== распознавание слов нейросетью ====================
+// звук -> 16 кГц моно WAV: такой ждёт whisper
+async function wavOf(blob) {
+  const buf = await new OfflineAudioContext(1, 1, 16000).decodeAudioData(await blob.arrayBuffer());
+  const n = buf.length, ch = buf.numberOfChannels, out = new DataView(new ArrayBuffer(44 + n * 2));
+  const str = (o, x) => { for (let i = 0; i < x.length; i++) out.setUint8(o + i, x.charCodeAt(i)); };
+  str(0, 'RIFF'); out.setUint32(4, 36 + n * 2, true); str(8, 'WAVEfmt '); out.setUint32(16, 16, true);
+  out.setUint16(20, 1, true); out.setUint16(22, 1, true); out.setUint32(24, 16000, true); out.setUint32(28, 32000, true);
+  out.setUint16(32, 2, true); out.setUint16(34, 16, true); str(36, 'data'); out.setUint32(40, n * 2, true);
+  const data = [...Array(ch)].map((_, c) => buf.getChannelData(c));
+  for (let i = 0; i < n; i++) {
+    let v = 0;
+    for (let c = 0; c < ch; c++) v += data[c][i];
+    out.setInt16(44 + i * 2, Math.max(-1, Math.min(1, v / ch)) * 32767, true);
+  }
+  return out.buffer;
+}
+const AI_STAGE = {
+  bin: ['Скачиваю распознавание', 'Один раз. Дальше будет сразу.'],
+  unzip: ['Распаковываю', 'Ещё чуть-чуть.'],
+  model: ['Скачиваю нейросеть', 'Один раз, около 550 МБ.'],
+  run: ['Распознаю слова', 'Нейросеть слушает песню.'],
+  cpu: ['Распознаю слова', 'Видеокарта не завелась, считаю на процессоре. Будет медленнее.'],
+};
+if (window.lnApp && window.lnApp.onWhisper) {
+  window.lnApp.onWhisper(({ stage, p }) => { const [a, b] = AI_STAGE[stage] || AI_STAGE.run; showLoading(a, b, p); });
+}
+async function aiOpen() {
+  if (!cur || !window.lnApp) return;
+  $('aiFirst').hidden = await window.lnApp.whisperReady().catch(() => false);
+  $('aiReplace').hidden = !lyricsOf(cur);
+  $('aiLang').value = settings.lang || 'auto';
+  $('aiDlg').hidden = false;
+}
+async function aiRun() {
+  const song = cur;
+  $('aiDlg').hidden = true;
+  settings.lang = $('aiLang').value;
+  saveSettings();
+  showLoading('Готовлю звук', song.name, 0);
+  $('loadActs').hidden = false;
+  try {
+    const json = await window.lnApp.whisper({ wav: await wavOf(song.blob), lang: settings.lang });
+    if (json == null) return; // отменили
+    const lines = whisperToLines(json);
+    if (!lines.length) { toast('Нейросеть не услышала слов в этом треке'); return; }
+    song.lyrics = lines;
+    saveSong(song);
+    if (song === cur) renderLines();
+    renderSongs();
+    toast('Готово. Ошибку в строке правь двойным кликом');
+  } catch (e) {
+    toast(String((e && e.message) || e).replace(/^Error invoking remote method '[^']+': (Error: )?/, ''));
+  } finally {
+    $('loading').hidden = true;
+    $('loadActs').hidden = true;
+  }
+}
+$('aiBtn').addEventListener('click', aiOpen);
+$('emptyAi').addEventListener('click', aiOpen);
+$('aiGo').addEventListener('click', aiRun);
+$('aiCancel').addEventListener('click', () => { $('aiDlg').hidden = true; });
+$('loadCancel').addEventListener('click', () => window.lnApp.whisperCancel());
+
 // ==================== кадр: перемотка, бас, строка ====================
 function frame() {
   requestAnimationFrame(frame);
@@ -457,10 +558,11 @@ function frame() {
   document.documentElement.style.setProperty('--kick', kick.toFixed(3));
 
   const L = lyricsOf(cur), els = $('lines').children;
-  if (!els.length || (!sync && !L)) return;
+  if (editing || !els.length || (!sync && !L)) return;
   const i = sync ? sync.i : lineAt(L, t);
   if (i !== lineIdx) {
     lineIdx = i;
+    sungN = -1;
     for (let k = 0; k < els.length; k++) {
       els[k].classList.toggle('past', k < i);
       els[k].classList.toggle(sync ? 'next' : 'on', k === i);
@@ -468,7 +570,13 @@ function frame() {
     const el = els[Math.max(0, Math.min(els.length - 1, i))];
     $('lines').style.transform = `translateY(${-(el.offsetTop + el.offsetHeight / 2)}px)`;
   }
-  if (!sync && i >= 0) {
+  if (!sync && i >= 0 && L[i].words) {
+    // слово загорается в момент, когда его поют
+    const W = L[i].words;
+    let n = 0;
+    while (n < W.length && W[n].t <= t) n++;
+    if (n !== sungN) { sungN = n; [...els[i].children].forEach((sp, k) => sp.classList.toggle('sung', k < n)); }
+  } else if (!sync && i >= 0) {
     // строка заливается слева направо, пока её поют
     const end = i + 1 < L.length ? L[i + 1].t : L[i].t + 4000;
     els[i].style.setProperty('--p', Math.min(1, (t - L[i].t) / Math.max(400, Math.min(end - L[i].t, 7000) * 0.85)).toFixed(3));
@@ -493,6 +601,8 @@ $('songs').addEventListener('click', () => document.body.classList.remove('lib')
 addEventListener('mouseup', (e) => { const b = e.target.closest && e.target.closest('button,input[type=range]'); if (b) b.blur(); });
 addEventListener('keydown', (e) => {
   const tag = e.target.tagName;
+  if (e.target.isContentEditable) return;
+  if (!$('aiDlg').hidden) { if (e.code === 'Escape') $('aiDlg').hidden = true; return; }
   if (!$('syncDlg').hidden || tag === 'TEXTAREA' || (tag === 'INPUT' && e.target.type !== 'range')) {
     if (e.code === 'Escape') { $('syncDlg').hidden = true; e.target.blur(); }
     return;

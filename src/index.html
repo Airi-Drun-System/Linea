@@ -136,6 +136,17 @@ input[type=range]:hover::-webkit-slider-thumb{transform:scale(1.25)}
 .syncBar .main{background:var(--a1);color:var(--on-a1);padding:14px 26px;font-size:16px}
 .foot{display:flex;flex-wrap:wrap;gap:6px 16px;color:var(--dim);font-size:13px}
 
+/* слова по словам: спетые загораются по одному */
+.ln.on.wl{color:rgba(255,255,255,.42);background:none;-webkit-background-clip:border-box;background-clip:border-box}
+.ln .w{transition:color .18s,text-shadow .3s}
+.ln.on .w.sung{color:#fff;text-shadow:0 0 18px color-mix(in srgb,var(--a1) 55%,transparent)}
+.ln[contenteditable=true]{filter:none;color:#fff;outline:2px dashed color-mix(in srgb,var(--a1) 70%,transparent);outline-offset:6px;border-radius:8px;cursor:text;user-select:text;background:none;-webkit-background-clip:border-box}
+.pill.ai{background:var(--a1);color:var(--on-a1);border-color:transparent}
+.pill.ai:hover{background:var(--a1);filter:brightness(1.1)}
+.field{display:flex;flex-direction:column;gap:6px;font-weight:700}
+.field select{background:rgba(255,255,255,.08);border:1px solid var(--line);border-radius:12px;padding:9px 12px;font:600 14px var(--ui);color:var(--fg)}
+.field select option{background:#16161e}
+
 /* окна */
 .over{position:fixed;inset:0;display:grid;place-items:center;padding:16px;background:rgba(6,6,9,.6);backdrop-filter:blur(14px);animation:fade .25s both;z-index:5}
 .card{background:rgba(22,22,30,.86);border:1px solid var(--line);border-radius:28px;padding:28px;width:min(560px,100%);display:flex;flex-direction:column;gap:14px;animation:pop .45s var(--spring) both;box-shadow:0 40px 100px rgba(0,0,0,.5)}
@@ -177,6 +188,7 @@ input[type=range]:hover::-webkit-slider-thumb{transform:scale(1.25)}
     <header class="top">
       <button class="pill" id="libBtn">Песни</button>
       <span class="grow"></span>
+      <button class="pill ai" id="aiBtn">Распознать слова</button>
       <button class="pill" id="findLrc">Найти слова</button>
       <button class="pill" id="editLrc">Разметить слова</button>
       <button class="pill" id="fileLrc">Файл .lrc</button>
@@ -199,7 +211,7 @@ input[type=range]:hover::-webkit-slider-thumb{transform:scale(1.25)}
         <div class="empty" id="empty" hidden>
           <h2 id="emptyTitle">Песен пока нет</h2>
           <p id="emptyText"></p>
-          <div class="acts" id="emptyActs"><button class="main" id="emptySync">Вставить текст и разметить</button><button id="emptyFind">Найти в интернете</button></div>
+          <div class="acts" id="emptyActs"><button class="main" id="emptyAi">Распознать нейросетью</button><button id="emptySync">Вставить текст и разметить</button><button id="emptyFind">Найти в интернете</button></div>
         </div>
       </section>
     </section>
@@ -218,8 +230,21 @@ input[type=range]:hover::-webkit-slider-thumb{transform:scale(1.25)}
   </div>
 </div>
 
+<div class="over" id="aiDlg" hidden>
+  <div class="card">
+    <h3>Распознать слова</h3>
+    <p>Нейросеть Whisper послушает песню и запишет слова с временем каждого слова. Всё считается на твоём компьютере, без интернета.</p>
+    <p id="aiFirst">В первый раз скачается около 1 ГБ: программа распознавания и сама нейросеть. Дальше — сразу.</p>
+    <p id="aiReplace" hidden>Слова, которые сейчас у песни, заменятся.</p>
+    <label class="field">Язык песни
+      <select id="aiLang"><option value="auto">Определить самому</option><option value="ru">Русский</option><option value="en">Английский</option><option value="uk">Украинский</option></select>
+    </label>
+    <div class="acts"><button class="main" id="aiGo">Распознать</button><button id="aiCancel">Отмена</button></div>
+  </div>
+</div>
+
 <div class="over" id="loading" hidden>
-  <div class="card"><h3 id="loadTitle"></h3><p id="loadText"></p><div class="bar"><i id="loadBar"></i></div></div>
+  <div class="card"><h3 id="loadTitle"></h3><p id="loadText"></p><div class="bar"><i id="loadBar"></i></div><div class="acts" id="loadActs" hidden><button id="loadCancel">Отмена</button></div></div>
 </div>
 
 <script src="lib.js"></script>
