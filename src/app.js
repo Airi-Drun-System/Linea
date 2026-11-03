@@ -234,7 +234,7 @@ function renderSongs() {
       if (s === cur) { audio.pause(); audio.removeAttribute('src'); cur = null; if (songs[0]) load(songs[0], false); else showSong(); }
       renderSongs(); upText();
     });
-    el.addEventListener('click', () => { if (s !== cur) load(s, true); else toggle(); });
+    el.addEventListener('click', () => { if (s !== cur) { pushHist(); load(s, true); } else toggle(); });
     el.addEventListener('keydown', (e) => { if (e.key === 'Enter') load(s, true); });
     box.appendChild(el);
   });
@@ -280,6 +280,7 @@ function showSong() {
 function upText() {
   const nx = cur && songs[(songs.indexOf(cur) + 1) % songs.length];
   $('up').textContent = '';
+  if (settings.shuffle && songs.length > 2) { $('up').textContent = 'Дальше: случайная'; return; }
   if (!nx || nx === cur) return;
   const b = document.createElement('b'); b.textContent = nx.name;
   $('up').append('Дальше: ', b);
@@ -291,20 +292,35 @@ async function load(song, autoplay) {
   if (url) URL.revokeObjectURL(url);
   url = URL.createObjectURL(song.blob);
   audio.src = url;
+  audio.defaultPlaybackRate = audio.playbackRate = SPEEDS[settings.speed || 0][0];
+  audio.preservesPitch = false; // sped up и slowed как в тиктоке: вместе с темпом меняется и тон
   showSong(); upText(); renderSongs();
+  if (slideDir) { const c = document.querySelector('.cover'); c.classList.remove('inNext', 'inPrev'); void c.offsetWidth; c.classList.add(slideDir > 0 ? 'inNext' : 'inPrev'); slideDir = 0; }
+  waveDirty = true;
+  if (!song.wave) waveOf(song);
   if (autoplay) play();
   await songImage(song);
   if (cur !== song) return;
   applyPalette(song);
+  waveDirty = true;
   $('coverImg').src = song.imgUrl;
   $('bgImg').style.backgroundImage = `url("${song.imgUrl}")`;
   if (window.MediaMetadata) navigator.mediaSession.metadata = new MediaMetadata({ title: song.name, artist: song.artist || '', artwork: [{ src: song.imgUrl }] });
 }
+// история прослушанного: «назад» возвращает к тому, что реально играло, и в перемешке тоже
+const hist = [];
+let slideDir = 0;
+function pushHist() { if (cur) { hist.push(cur); if (hist.length > 100) hist.shift(); } }
 function step(d) {
   if (sync || !songs.length) return;
   if (d < 0 && audio.currentTime > 3) { audio.currentTime = 0; return; } // как в любом плеере: сначала в начало песни
-  const i = cur ? songs.indexOf(cur) : -1;
-  load(songs[(i + d + songs.length) % songs.length], true);
+  let nx = null;
+  if (d < 0) while (hist.length && !nx) { const h = hist.pop(); if (songs.includes(h) && h !== cur) nx = h; }
+  if (!nx && d > 0 && settings.shuffle && songs.length > 1) do nx = songs[Math.floor(Math.random() * songs.length)]; while (nx === cur);
+  if (!nx) { const i = cur ? songs.indexOf(cur) : -1; nx = songs[(i + d + songs.length) % songs.length]; }
+  if (d > 0) pushHist();
+  slideDir = d;
+  load(nx, true);
 }
 function setVolume(v) {
   settings.volume = Math.round(Math.max(0, Math.min(1, v)) * 20) / 20;
@@ -316,6 +332,7 @@ function setVolume(v) {
 audio.addEventListener('play', () => { $('play').querySelector('path').setAttribute('d', PATH.pause); $('play').ariaLabel = 'Пауза'; });
 audio.addEventListener('pause', () => { $('play').querySelector('path').setAttribute('d', PATH.play); $('play').ariaLabel = 'Играть'; });
 audio.addEventListener('ended', () => {
+  if (!sync && settings.repeat) { audio.currentTime = 0; play(); return; }
   if (!sync) return step(1);
   // песня кончилась посреди разметки: сохраняем то, что успели
   if (sync.i) { sync.lines.length = sync.i; syncDone(true); } else syncDone(false);
@@ -346,6 +363,8 @@ function renderLines() {
   $('emptyActs').hidden = !cur || searching.has(cur.id);
   $('emptyFind').hidden = !window.lnApp;
   $('findLrc').hidden = !window.lnApp;
+  $('offs').hidden = !lyricsOf(cur) || !!sync;
+  $('offV').textContent = offText();
   $('aiBtn').hidden = $('emptyAi').hidden = !(window.lnApp && window.lnApp.whisper);
   lines.forEach((l) => {
     const el = document.createElement('div');
@@ -353,7 +372,7 @@ function renderLines() {
     if (l.words) l.words.forEach((w, k) => { const sp = document.createElement('span'); sp.className = 'w'; sp.textContent = (k ? ' ' : '') + w.text; el.appendChild(sp); });
     else el.textContent = l.text || '• • •';
     if (!sync) {
-      el.addEventListener('click', () => { if (el.isContentEditable) return; audio.currentTime = Math.max(0, l.t / 1000); if (audio.paused) play(); });
+      el.addEventListener('click', () => { if (el.isContentEditable) return; audio.currentTime = Math.max(0, (l.t + (cur.lyrOff || 0)) / 1000); if (audio.paused) play(); });
       el.addEventListener('dblclick', () => editLine(el, l));
     }
     box.appendChild(el);
@@ -392,17 +411,20 @@ function editLine(el, l) {
   el.addEventListener('blur', onBlur);
 }
 // слова с таймингами — с lrclib.net (только в программе для Windows)
-async function findLyrics(song, quiet) {
+async function findLyrics(song, quiet, q) {
   if (!window.lnApp) return false;
   searching.add(song.id);
   if (song === cur) renderLines();
   try {
-    const r = await window.lnApp.findLyrics({ title: song.name, artist: song.artist || '', duration: Math.round(song.duration / 1000) });
+    const r = await window.lnApp.findLyrics(Object.assign({ title: song.name, artist: song.artist || '', duration: Math.round(song.duration / 1000) }, q));
     const lines = r && r.synced ? parseLRC(r.synced) : [];
-    if (lines.length) song.lyrics = lines;
+    if (lines.length) { song.lyrics = lines; song.lyrOff = 0; }
     else if (r && r.plain) song.plain = r.plain;
     saveSong(song);
-    if (!quiet && !lines.length) toast(r && r.plain ? 'Нашёлся только текст без таймингов' : 'Слова не нашлись');
+    if (!quiet && !lines.length) {
+      if (r && r.plain && q) { searching.delete(song.id); syncOpen(r.plain); toast('Нашёлся текст. Разметь его пробелом'); }
+      else toast(r && r.plain ? 'Нашёлся только текст без таймингов' : 'Слова не нашлись');
+    }
     return lines.length > 0;
   } catch { return false; } finally {
     searching.delete(song.id);
@@ -410,8 +432,24 @@ async function findLyrics(song, quiet) {
     renderSongs();
   }
 }
-$('findLrc').addEventListener('click', () => cur && findLyrics(cur, false));
-$('emptyFind').addEventListener('click', () => cur && findLyrics(cur, false));
+function findOpen() {
+  if (!cur) return;
+  $('findQ').value = cur.artist ? `${cur.artist} — ${cur.name}` : cur.name;
+  $('findDlg').hidden = false;
+  $('findQ').select();
+}
+function findGo() {
+  const v = $('findQ').value.trim();
+  if (!v) return;
+  $('findDlg').hidden = true;
+  const m = v.split(/\s+[-—–]\s+/);
+  findLyrics(cur, false, m.length > 1 ? { artist: m[0], title: m.slice(1).join(' - '), loose: true } : { artist: '', title: v, loose: true });
+}
+$('findLrc').addEventListener('click', findOpen);
+$('emptyFind').addEventListener('click', findOpen);
+$('findGo').addEventListener('click', findGo);
+$('findCancel').addEventListener('click', () => { $('findDlg').hidden = true; });
+$('findQ').addEventListener('keydown', (e) => { if (e.key === 'Enter') findGo(); });
 $('fileLrc').addEventListener('click', () => cur && $('lrcFile').click());
 $('lrcFile').addEventListener('change', async (e) => {
   const f = e.target.files[0], song = cur;
@@ -425,10 +463,10 @@ $('lrcFile').addEventListener('change', async (e) => {
 });
 
 // разметка: песня с начала, пробел на каждой новой строке
-function syncOpen() {
+function syncOpen(text) {
   if (!cur) return;
   const L = lyricsOf(cur);
-  $('syncText').value = L ? L.map((l) => l.text).filter(Boolean).join('\n') : cur.plain || '';
+  $('syncText').value = typeof text === 'string' ? text : L ? L.map((l) => l.text).filter(Boolean).join('\n') : cur.plain || '';
   $('syncClear').hidden = !L;
   $('syncDlg').hidden = false;
   $('syncText').focus();
@@ -446,6 +484,7 @@ function syncUndo() {
 function syncDone(save) {
   if (save) {
     cur.lyrics = sync.lines.map((text, k) => ({ t: sync.stamps[k], text }));
+    cur.lyrOff = 0;
     saveSong(cur);
     renderSongs();
   }
@@ -520,6 +559,7 @@ async function aiRun() {
     const lines = whisperToLines(json);
     if (!lines.length) { toast('Нейросеть не услышала слов в этом треке'); return; }
     song.lyrics = lines;
+    song.lyrOff = 0;
     saveSong(song);
     if (song === cur) renderLines();
     renderSongs();
@@ -536,6 +576,83 @@ $('emptyAi').addEventListener('click', aiOpen);
 $('aiGo').addEventListener('click', aiRun);
 $('aiCancel').addEventListener('click', () => { $('aiDlg').hidden = true; });
 $('loadCancel').addEventListener('click', () => window.lnApp.whisperCancel());
+
+
+// ==================== волна, скорость, режимы, сдвиг слов ====================
+let waveDirty = true, wavePx = -1;
+async function waveOf(song) {
+  try {
+    // 8 кГц моно хватает, чтобы увидеть громкость, и считается быстро
+    const buf = await new OfflineAudioContext(1, 1, 8000).decodeAudioData(await song.blob.arrayBuffer());
+    song.wave = peaks(buf.getChannelData(0), 200);
+    saveSong(song);
+    if (song === cur) waveDirty = true;
+  } catch { /* не декодируется — останется ровная полоска */ }
+}
+function drawWave() {
+  const cv = $('waveCv'), w = cv.clientWidth, h = cv.clientHeight, dpr = devicePixelRatio || 1;
+  if (!w) return;
+  const v = cur && audio.duration ? (seeking ? $('seek').value / 1000 : audio.currentTime / audio.duration) : 0;
+  const px = Math.round(v * w);
+  if (cv.width !== Math.round(w * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); waveDirty = true; }
+  if (!waveDirty && px === wavePx) return;
+  waveDirty = false; wavePx = px;
+  const x = cv.getContext('2d'), wave = cur && cur.wave, bw = 3, gap = 2, n = Math.floor(w / (bw + gap));
+  const a1 = getComputedStyle(document.documentElement).getPropertyValue('--a1').trim() || '#fff';
+  x.setTransform(dpr, 0, 0, dpr, 0, 0);
+  x.clearRect(0, 0, w, h);
+  for (let k = 0; k < n; k++) {
+    const amp = wave ? wave[Math.floor((k / n) * wave.length)] : 0.3;
+    const bh = Math.max(3, amp * (h - 4)), bx = k * (bw + gap);
+    x.fillStyle = bx + bw / 2 <= px ? a1 : 'rgba(255,255,255,.22)';
+    x.beginPath();
+    x.roundRect(bx, (h - bh) / 2, bw, bh, 1.5);
+    x.fill();
+  }
+}
+addEventListener('resize', () => { waveDirty = true; });
+
+// скорость: обычная, sped up, slowed
+const SPEEDS = [[1, 'Обычная'], [1.25, 'Sped up'], [0.8, 'Slowed']];
+function showModes() {
+  const sp = SPEEDS[settings.speed || 0];
+  $('spd').textContent = sp[1];
+  $('spd').classList.toggle('on', sp[0] !== 1);
+  $('shuf').ariaPressed = String(!!settings.shuffle);
+  $('rep').ariaPressed = String(!!settings.repeat);
+}
+$('spd').addEventListener('click', () => {
+  settings.speed = ((settings.speed || 0) + 1) % SPEEDS.length;
+  audio.defaultPlaybackRate = audio.playbackRate = SPEEDS[settings.speed][0];
+  saveSettings(); showModes();
+});
+$('shuf').addEventListener('click', () => { settings.shuffle = !settings.shuffle; saveSettings(); showModes(); upText(); });
+$('rep').addEventListener('click', () => { settings.repeat = !settings.repeat; saveSettings(); showModes(); });
+
+// колесо мыши по обложке листает треки, как свайп в телефоне
+let wheelAcc = 0, wheelAt = 0;
+document.querySelector('.cover').addEventListener('wheel', (e) => {
+  e.preventDefault();
+  const now = performance.now();
+  if (now - wheelAt < 550) return;
+  wheelAcc += e.deltaY;
+  if (Math.abs(wheelAcc) < 60) return;
+  step(wheelAcc > 0 ? 1 : -1);
+  wheelAcc = 0; wheelAt = now;
+}, { passive: false });
+
+// слова спешат или опаздывают — двигаем на 0.1 с
+function shiftLyrics(d) {
+  if (!cur || !lyricsOf(cur)) return;
+  cur.lyrOff = Math.max(-10000, Math.min(10000, (cur.lyrOff || 0) + d));
+  saveSong(cur);
+  $('offV').textContent = offText();
+  lineIdx = -2;
+}
+function offText() { const v = ((cur && cur.lyrOff) || 0) / 1000; return (v >= 0 ? '+' : '') + v.toFixed(1) + ' с'; }
+$('offM').addEventListener('click', () => shiftLyrics(-100));
+$('offP').addEventListener('click', () => shiftLyrics(100));
+showModes();
 
 // ==================== кадр: перемотка, бас, строка ====================
 function frame() {
@@ -557,9 +674,11 @@ function frame() {
   } else kick *= 0.86;
   document.documentElement.style.setProperty('--kick', kick.toFixed(3));
 
+  drawWave();
   const L = lyricsOf(cur), els = $('lines').children;
+  const lt = t - ((cur && cur.lyrOff) || 0); // слова со сдвигом
   if (editing || !els.length || (!sync && !L)) return;
-  const i = sync ? sync.i : lineAt(L, t);
+  const i = sync ? sync.i : lineAt(L, lt);
   if (i !== lineIdx) {
     lineIdx = i;
     sungN = -1;
@@ -574,12 +693,12 @@ function frame() {
     // слово загорается в момент, когда его поют
     const W = L[i].words;
     let n = 0;
-    while (n < W.length && W[n].t <= t) n++;
+    while (n < W.length && W[n].t <= lt) n++;
     if (n !== sungN) { sungN = n; [...els[i].children].forEach((sp, k) => sp.classList.toggle('sung', k < n)); }
   } else if (!sync && i >= 0) {
     // строка заливается слева направо, пока её поют
     const end = i + 1 < L.length ? L[i + 1].t : L[i].t + 4000;
-    els[i].style.setProperty('--p', Math.min(1, (t - L[i].t) / Math.max(400, Math.min(end - L[i].t, 7000) * 0.85)).toFixed(3));
+    els[i].style.setProperty('--p', Math.min(1, (lt - L[i].t) / Math.max(400, Math.min(end - L[i].t, 7000) * 0.85)).toFixed(3));
   }
 }
 
@@ -603,6 +722,7 @@ addEventListener('keydown', (e) => {
   const tag = e.target.tagName;
   if (e.target.isContentEditable) return;
   if (!$('aiDlg').hidden) { if (e.code === 'Escape') $('aiDlg').hidden = true; return; }
+  if (!$('findDlg').hidden) { if (e.code === 'Escape') $('findDlg').hidden = true; return; }
   if (!$('syncDlg').hidden || tag === 'TEXTAREA' || (tag === 'INPUT' && e.target.type !== 'range')) {
     if (e.code === 'Escape') { $('syncDlg').hidden = true; e.target.blur(); }
     return;

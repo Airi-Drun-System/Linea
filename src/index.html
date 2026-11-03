@@ -107,7 +107,7 @@ input[type=range]:hover::-webkit-slider-thumb{transform:scale(1.25)}
 #play{width:74px;height:74px;background:var(--a1);color:var(--on-a1);box-shadow:0 14px 40px -6px color-mix(in srgb,var(--a1) 70%,transparent);transition:transform .25s var(--spring),background .6s,box-shadow .6s}
 #play svg{width:32px;height:32px}
 #play:hover{transform:scale(1.06)}
-.vol{display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px;align-items:center;max-width:220px;width:100%;margin:0 auto;color:var(--dim)}
+.vol{flex:1;display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px;align-items:center;max-width:170px;color:var(--dim);margin:0 6px}
 .vol svg{width:18px;height:18px;fill:currentColor}
 .up{text-align:center;color:var(--dim);font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .up b{color:var(--fg);font-weight:700}
@@ -146,6 +146,32 @@ input[type=range]:hover::-webkit-slider-thumb{transform:scale(1.25)}
 .field{display:flex;flex-direction:column;gap:6px;font-weight:700}
 .field select{background:rgba(255,255,255,.08);border:1px solid var(--line);border-radius:12px;padding:9px 12px;font:600 14px var(--ui);color:var(--fg)}
 .field select option{background:#16161e}
+
+/* волна вместо полоски: сыгранная часть в цвете песни */
+.wave{position:relative;height:42px}
+.wave canvas{position:absolute;inset:0;width:100%;height:100%}
+.wave input{position:absolute;inset:0;width:100%;height:100%;opacity:0;margin:0}
+.wave:has(input:focus-visible){outline:2px solid var(--a1);outline-offset:4px;border-radius:8px}
+/* перемешать, повтор, скорость */
+.modes{display:flex;justify-content:center;align-items:center;gap:6px}
+.mode{position:relative;height:34px;min-width:34px;padding:0 10px;border-radius:99px;display:grid;place-items:center;color:var(--dim);border:1px solid transparent;font-weight:700;font-size:13px}
+.mode svg{width:17px;height:17px;fill:currentColor}
+.mode:hover{color:var(--fg);background:var(--glass)}
+.mode[aria-pressed=true]{color:var(--a1);background:color-mix(in srgb,var(--a1) 14%,transparent);border-color:color-mix(in srgb,var(--a1) 40%,transparent)}
+.mode i{position:absolute;right:5px;bottom:3px;font:800 9px var(--ui);font-style:normal}
+.spd.on{color:var(--on-a1);background:var(--a1)}
+/* сдвиг слов */
+.offs{display:flex;align-items:center;gap:2px;padding:3px;border-radius:99px;background:var(--glass);border:1px solid var(--line);font-size:13px}
+.offs button{width:30px;height:30px;border-radius:50%;font-weight:800;font-size:16px}
+.offs button:hover{background:var(--glass-2)}
+.offs b{min-width:52px;text-align:center;font-variant-numeric:tabular-nums}
+/* листание треков: обложка въезжает снизу или сверху */
+@keyframes inNext{from{translate:0 70px;opacity:0;filter:blur(12px)}}
+@keyframes inPrev{from{translate:0 -70px;opacity:0;filter:blur(12px)}}
+.cover.inNext{animation:inNext .55s var(--ease) both}
+.cover.inPrev{animation:inPrev .55s var(--ease) both}
+.cover{cursor:ns-resize}
+.card>.find{padding:12px 14px}
 
 /* окна */
 .over{position:fixed;inset:0;display:grid;place-items:center;padding:16px;background:rgba(6,6,9,.6);backdrop-filter:blur(14px);animation:fade .25s both;z-index:5}
@@ -189,6 +215,7 @@ input[type=range]:hover::-webkit-slider-thumb{transform:scale(1.25)}
       <button class="pill" id="libBtn">Песни</button>
       <span class="grow"></span>
       <button class="pill ai" id="aiBtn">Распознать слова</button>
+      <span class="offs" id="offs" hidden title="Если слова спешат или опаздывают"><button id="offM" aria-label="Слова раньше">−</button><b id="offV">0.0 с</b><button id="offP" aria-label="Слова позже">+</button></span>
       <button class="pill" id="findLrc">Найти слова</button>
       <button class="pill" id="editLrc">Разметить слова</button>
       <button class="pill" id="fileLrc">Файл .lrc</button>
@@ -197,13 +224,19 @@ input[type=range]:hover::-webkit-slider-thumb{transform:scale(1.25)}
       <section class="left">
         <div class="cover"><img id="coverImg" alt=""></div>
         <div class="meta" id="meta"><h1 id="title">Linea</h1><p id="artist">Добавь песни слева</p></div>
-        <div class="seek"><span id="cur">0:00</span><input type="range" id="seek" min="0" max="1000" value="0" aria-label="Перемотка"><span id="dur">0:00</span></div>
+        <div class="seek"><span id="cur">0:00</span><div class="wave"><canvas id="waveCv"></canvas><input type="range" id="seek" min="0" max="1000" value="0" aria-label="Перемотка"></div><span id="dur">0:00</span></div>
         <div class="btns">
           <button class="step" id="prev" aria-label="Предыдущая"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5h2v14H6zM20 5v14L9 12z"/></svg></button>
           <button id="play" aria-label="Играть"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg></button>
           <button class="step" id="next" aria-label="Следующая"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 5h2v14h-2zM4 5v14l11-7z"/></svg></button>
         </div>
-        <label class="vol"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9zm12.5 3a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4z"/></svg><input type="range" id="vol" min="0" max="1" step="0.05" aria-label="Громкость"></label>
+        
+        <div class="modes">
+          <button class="mode" id="shuf" aria-pressed="false" title="Перемешать"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 3h5v5l-1.8-1.8-4.3 4.3-1.4-1.4 4.3-4.3zM4 5.4 5.4 4 20 18.6 18.6 20zM14.3 15.7l1.4-1.4 3.5 3.5L21 16v5h-5l1.8-1.8z"/></svg></button>
+          <button class="mode" id="rep" aria-pressed="false" title="Повторять песню"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h10v3l4-4-4-4v3H5v6h2zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2z"/></svg><i>1</i></button>
+          <label class="vol"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9zm12.5 3a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4z"/></svg><input type="range" id="vol" min="0" max="1" step="0.05" aria-label="Громкость"></label>
+          <button class="mode spd" id="spd" title="Скорость">Обычная</button>
+        </div>
         <p class="up" id="up"></p>
         <div class="syncBar" id="syncBar" hidden><button class="main" id="syncTap">Строка!</button><button id="syncUndo">Назад</button><button id="syncStop">Отмена</button></div>
       </section>
@@ -240,6 +273,15 @@ input[type=range]:hover::-webkit-slider-thumb{transform:scale(1.25)}
       <select id="aiLang"><option value="auto">Определить самому</option><option value="ru">Русский</option><option value="en">Английский</option><option value="uk">Украинский</option></select>
     </label>
     <div class="acts"><button class="main" id="aiGo">Распознать</button><button id="aiCancel">Отмена</button></div>
+  </div>
+</div>
+
+<div class="over" id="findDlg" hidden>
+  <div class="card">
+    <h3>Найти слова</h3>
+    <p>Для мешапа или ремикса впиши оригинал: «Исполнитель — Песня». Если слова с таймингами не подойдут по длине, найдётся текст, и его останется разметить.</p>
+    <input class="find" id="findQ" spellcheck="false" placeholder="Исполнитель — Песня">
+    <div class="acts"><button class="main" id="findGo">Искать</button><button id="findCancel">Отмена</button></div>
   </div>
 </div>
 

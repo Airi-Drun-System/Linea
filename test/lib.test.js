@@ -1,6 +1,6 @@
 'use strict';
 const assert = require('assert');
-const { parseLRC, lineAt, fmtDur, cleanName, whisperToLines, retextLine } = require('../src/lib.js');
+const { parseLRC, lineAt, fmtDur, cleanName, whisperToLines, retextLine, peaks } = require('../src/lib.js');
 
 const L = parseLRC('[ar:x]\n[00:01.50]раз\n[00:00.20][00:03.00]два\nбез метки\n[01:02.5]три');
 assert.deepStrictEqual(L.map((l) => [Math.round(l.t), l.text]), [[200, 'два'], [1500, 'раз'], [3000, 'два'], [62500, 'три']]);
@@ -28,4 +28,6 @@ assert.deepStrictEqual(retextLine(W[1], 'Второй припев', 6000).words
 const R = retextLine(W[1], 'а это второй куплет', 6000).words.map((w) => w.t);
 assert.deepStrictEqual(R, [4000, 4200, 4400, 5200]);
 assert.deepStrictEqual(retextLine({ t: 0, text: 'x' }, 'раз два', 2000).words.map((w) => w.t), [0, 1000]);
+const pk = peaks(Float32Array.from({ length: 4000 }, (_, i) => (i < 2000 ? 0.1 : 0.5) * (i % 2 ? 1 : -1)), 4);
+assert.deepStrictEqual(pk, [0.2, 0.2, 1, 1]);
 console.log('lib: ok');

@@ -57,7 +57,8 @@ ipcMain.handle('lyrics:find', async (_e, q) => {
     const synced = list.filter((x) => x.syncedLyrics && near(x)).sort(byDur)[0];
     if (synced) return { synced: synced.syncedLyrics };
     // текст без таймингов тоже пригодится: его можно разметить пробелом в плеере
-    if (!plain) { const p = list.filter((x) => x.plainLyrics && near(x)).sort(byDur)[0]; plain = p ? p.plainLyrics : null; }
+    // поиск по названию оригинала (для мешапа): текст подойдёт и от трека другой длины
+    if (!plain) { const p = list.filter((x) => x.plainLyrics && (q.loose || near(x))).sort(byDur)[0]; plain = p ? p.plainLyrics : null; }
     return plain ? { plain } : null;
   } catch { return null; }
 });

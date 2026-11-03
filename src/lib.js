@@ -74,4 +74,15 @@ function retextLine(line, text, endT) {
   });
   return { t: line.t, text: parts.join(' '), words };
 }
-if (typeof module !== 'undefined') module.exports = { hashStr, rng, fmtDur, cleanName, parseLRC, lineAt, whisperToLines, retextLine };
+// волна для полосы перемотки: n столбиков по громкости, 0..1
+function peaks(data, n) {
+  const out = new Array(n).fill(0), step = data.length / n;
+  for (let k = 0; k < n; k++) {
+    let s = 0, c = 0;
+    for (let i = Math.floor(k * step), e = Math.min(data.length, Math.floor((k + 1) * step)); i < e; i += 4) { s += data[i] * data[i]; c++; }
+    out[k] = c ? Math.sqrt(s / c) : 0;
+  }
+  const max = Math.max(...out) || 1;
+  return out.map((v) => Math.round((v / max) * 100) / 100);
+}
+if (typeof module !== 'undefined') module.exports = { hashStr, rng, fmtDur, cleanName, parseLRC, lineAt, whisperToLines, retextLine, peaks };
