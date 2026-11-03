@@ -14,26 +14,27 @@ const DB = (() => {
   let p = null;
   const open = () => p || (p = new Promise((res, rej) => {
     try {
-      const r = indexedDB.open('linea', 1);
-      r.onupgradeneeded = () => r.result.createObjectStore('songs', { keyPath: 'id' });
+      const r = indexedDB.open('linea', 2);
+      r.onupgradeneeded = () => { for (const n of ['songs', 'bgs']) if (!r.result.objectStoreNames.contains(n)) r.result.createObjectStore(n, { keyPath: 'id' }); };
       r.onsuccess = () => res(r.result);
       r.onerror = () => rej(r.error);
     } catch (e) { rej(e); }
   }));
-  const tx = async (mode, fn) => {
+  const tx = async (store, mode, fn) => {
     const db = await open();
     return new Promise((res, rej) => {
-      const t = db.transaction('songs', mode);
-      const req = fn(t.objectStore('songs'));
+      const t = db.transaction(store, mode);
+      const req = fn(t.objectStore(store));
       t.oncomplete = () => res(req && req.result);
       t.onerror = () => rej(t.error);
     });
   };
-  return {
-    all: () => tx('readonly', (s) => s.getAll()).catch(() => []),
-    put: (v) => tx('readwrite', (s) => s.put(v)).catch(() => {}),
-    del: (id) => tx('readwrite', (s) => s.delete(id)).catch(() => {}),
-  };
+  const api = (store) => ({
+    all: () => tx(store, 'readonly', (s) => s.getAll()).catch(() => []),
+    put: (v) => tx(store, 'readwrite', (s) => s.put(v)).catch(() => {}),
+    del: (id) => tx(store, 'readwrite', (s) => s.delete(id)).catch(() => {}),
+  });
+  return Object.assign(api('songs'), { bgs: api('bgs') });
 })();
 
 // ---------- теги mp3: название, исполнитель и обложка из ID3 ----------
@@ -158,7 +159,7 @@ let query = '';
 const audio = new Audio();
 audio.volume = settings.volume;
 
-const saveSong = (song) => { const { img, imgUrl, imgPromise, ...rec } = song; DB.put(rec); };
+const saveSong = (song) => { const { img, imgUrl, imgPromise, bgUrl, ...rec } = song; DB.put(rec); };
 const lyricsOf = (s) => (s && s.lyrics && s.lyrics.length ? s.lyrics : null);
 
 function toast(text) {
@@ -194,33 +195,38 @@ async function addFiles(list) {
     const song = { id, name: tags.title || cleanName(file.name), artist: tags.artist || '', cover: tags.cover || null, blob: file, duration, added: Date.now() };
     await DB.put(song);
     songs.unshift(song);
+    if (plById(view)) plById(view).ids.push(song.id);
     added++;
     first = first || song;
     findLyrics(song, true); // слова ищутся сами, в фоне
   }
   $('loading').hidden = true;
+  savePls(); renderPls();
   renderSongs();
   if (first && !cur) load(first, true);
   else upText();
   if (added > 1) toast(`Добавлено песен: ${added}`);
 }
 $('file').addEventListener('change', (e) => { addFiles([...e.target.files]); e.target.value = ''; });
-for (const ev of ['dragenter', 'dragover']) addEventListener(ev, (e) => { e.preventDefault(); $('drop').classList.add('over'); });
+for (const ev of ['dragenter', 'dragover']) addEventListener(ev, (e) => { if (!e.dataTransfer.types.includes('Files')) return; e.preventDefault(); $('drop').classList.add('over'); });
 for (const ev of ['dragleave', 'drop']) addEventListener(ev, (e) => { e.preventDefault(); $('drop').classList.remove('over'); });
-addEventListener('drop', (e) => addFiles([...(e.dataTransfer?.files || [])].filter((x) => /^audio\//.test(x.type) || /\.(mp3|ogg|wav|flac|m4a|opus|aac)$/i.test(x.name))));
+addEventListener('drop', (e) => e.dataTransfer.types.includes('Files') && addFiles([...(e.dataTransfer?.files || [])].filter((x) => /^audio\//.test(x.type) || /\.(mp3|ogg|wav|flac|m4a|opus|aac)$/i.test(x.name))));
 $('find').addEventListener('input', () => { query = $('find').value.trim().toLowerCase(); renderSongs(); });
 
 function renderSongs() {
   const box = $('songs');
   const keep = box.scrollTop;
   box.textContent = '';
-  const shown = songs.filter((s) => !query || (s.name + ' ' + s.artist).toLowerCase().includes(query));
+  const shown = listOf(view).filter((s) => !query || (s.name + ' ' + s.artist).toLowerCase().includes(query));
   shown.forEach((s, i) => {
     const el = document.createElement('div');
     el.className = 'song' + (s === cur ? ' on' : '');
     el.style.setProperty('--i', Math.min(i, 15));
     el.tabIndex = 0;
+    el.draggable = true;
     el.innerHTML = '<img alt=""><b></b><button class="del" title="Убрать из плеера">×</button><small></small>';
+    el.addEventListener('dragstart', (e) => { e.dataTransfer.setData('text/x-linea-song', s.id); e.dataTransfer.effectAllowed = 'copy'; });
+    el.addEventListener('contextmenu', (e) => { e.preventDefault(); songMenu(s, e.clientX, e.clientY); });
     const img = el.querySelector('img');
     if (s.imgUrl) img.src = s.imgUrl; else songImage(s).then(() => { img.src = s.imgUrl; });
     el.querySelector('b').textContent = s.name;
@@ -231,18 +237,297 @@ function renderSongs() {
       if (!del.classList.contains('sure')) { del.classList.add('sure'); del.textContent = 'Убрать?'; setTimeout(() => { del.classList.remove('sure'); del.textContent = '×'; }, 2500); return; }
       await DB.del(s.id);
       songs.splice(songs.indexOf(s), 1);
+      playlists.forEach((p) => { p.ids = p.ids.filter((id) => id !== s.id); });
+      savePls(); renderPls();
       if (s === cur) { audio.pause(); audio.removeAttribute('src'); cur = null; if (songs[0]) load(songs[0], false); else showSong(); }
       renderSongs(); upText();
     });
-    el.addEventListener('click', () => { if (s !== cur) { pushHist(); load(s, true); } else toggle(); });
+    el.addEventListener('click', () => { ctx = view; if (s !== cur) { pushHist(); load(s, true); } else toggle(); });
     el.addEventListener('keydown', (e) => { if (e.key === 'Enter') load(s, true); });
     box.appendChild(el);
   });
   if (!songs.length) box.innerHTML = '<p class="none">Тут будут твои песни. Можно добавить сразу пачку.</p>';
+  else if (view !== 'all' && !listOf(view).length) box.innerHTML = '<p class="none">Плейлист пустой. Перетащи сюда песни из «Все песни» или нажми на песню правой кнопкой.</p>';
   else if (!shown.length) box.innerHTML = '<p class="none">Ничего не нашлось.</p>';
   box.scrollTop = keep;
 }
 
+
+// ==================== плейлисты ====================
+let playlists = store.get('ln.playlists', []); // [{ id, name, ids }]
+let view = 'all', ctx = 'all'; // что открыто в списке и откуда играет очередь
+const savePls = () => store.set('ln.playlists', playlists);
+const plById = (id) => playlists.find((p) => p.id === id);
+const listOf = (v) => { const p = plById(v); return p ? p.ids.map((id) => songs.find((s) => s.id === id)).filter(Boolean) : songs; };
+const queue = () => listOf(ctx);
+const plural = (n) => `${n} ${n % 10 === 1 && n % 100 !== 11 ? 'песня' : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? 'песни' : 'песен'}`;
+
+function renderPls() {
+  const box = $('pls');
+  box.textContent = '';
+  [{ id: 'all', name: 'Все песни' }, ...playlists].forEach((p) => {
+    const el = document.createElement('div'), list = listOf(p.id);
+    el.className = 'pl' + (view === p.id ? ' on' : '');
+    el.tabIndex = 0;
+    const mos = document.createElement('span');
+    mos.className = 'mos' + (p.id === 'all' ? ' all' : '');
+    if (p.id === 'all') mos.innerHTML = '<svg viewBox="0 0 24 24"><path d="M9 18V6l11-2v12M9 18a3 3 0 1 1-3-3 3 3 0 0 1 3 3zm11-2a3 3 0 1 1-3-3 3 3 0 0 1 3 3z"/></svg>';
+    else list.slice(0, 4).forEach((s) => { const i = document.createElement('img'); i.alt = ''; if (s.imgUrl) i.src = s.imgUrl; else songImage(s).then(() => { i.src = s.imgUrl; }); mos.appendChild(i); });
+    if (list.length && list.length < 4 && p.id !== 'all') mos.classList.add('one');
+    const b = document.createElement('b'), sm = document.createElement('small');
+    b.textContent = p.name; sm.textContent = plural(list.length);
+    el.append(mos, b, sm);
+    const open = () => { view = p.id; renderPls(); renderSongs(); };
+    el.addEventListener('click', open);
+    el.addEventListener('keydown', (e) => { if (e.key === 'Enter') open(); });
+    if (p.id !== 'all') {
+      el.addEventListener('contextmenu', (e) => { e.preventDefault(); plMenu(p, e.clientX, e.clientY); });
+      // песню из списка можно перетащить на плейлист
+      el.addEventListener('dragover', (e) => { if (e.dataTransfer.types.includes('text/x-linea-song')) { e.preventDefault(); el.classList.add('drop'); } });
+      el.addEventListener('dragleave', () => el.classList.remove('drop'));
+      el.addEventListener('drop', (e) => { e.preventDefault(); e.stopPropagation(); el.classList.remove('drop'); addToPl(p, e.dataTransfer.getData('text/x-linea-song')); });
+    }
+    box.appendChild(el);
+  });
+}
+function addToPl(p, id) {
+  const s = songs.find((x) => x.id === id);
+  if (!s) return;
+  if (p.ids.includes(id)) { toast('Эта песня уже в плейлисте'); return; }
+  p.ids.push(id);
+  savePls(); renderPls();
+  if (view === p.id) renderSongs();
+  toast(`«${s.name}» → ${p.name}`);
+}
+function askName(title, value) {
+  return new Promise((res) => {
+    $('nameTitle').textContent = title;
+    $('nameIn').value = value || '';
+    $('nameDlg').hidden = false;
+    $('nameIn').focus(); $('nameIn').select();
+    const done = (v) => { $('nameDlg').hidden = true; $('nameOk').onclick = $('nameCancel').onclick = $('nameIn').onkeydown = null; res(v); };
+    $('nameOk').onclick = () => done($('nameIn').value.trim() || null);
+    $('nameCancel').onclick = () => done(null);
+    $('nameIn').onkeydown = (e) => { if (e.key === 'Enter') done($('nameIn').value.trim() || null); if (e.key === 'Escape') done(null); };
+  });
+}
+async function newPl(withSong) {
+  const name = await askName('Новый плейлист', `Плейлист ${playlists.length + 1}`);
+  if (!name) return;
+  const p = { id: 'p' + Date.now().toString(36), name: name.slice(0, 60), ids: [] };
+  playlists.push(p);
+  if (withSong) p.ids.push(withSong.id);
+  savePls(); renderPls();
+}
+$('plNew').addEventListener('click', () => newPl());
+
+// меню по правой кнопке
+function showMenu(items, x, y) {
+  const m = $('menu');
+  m.textContent = '';
+  for (const it of items) {
+    if (it.label) { const h = document.createElement('p'); h.textContent = it.label; m.appendChild(h); continue; }
+    const b = document.createElement('button');
+    b.textContent = it.text;
+    if (it.bad) b.className = 'bad';
+    b.addEventListener('click', () => { hideMenu(); it.act(); });
+    m.appendChild(b);
+  }
+  m.hidden = false;
+  const r = m.getBoundingClientRect();
+  m.style.left = Math.min(x, innerWidth - r.width - 8) + 'px';
+  m.style.top = Math.min(y, innerHeight - r.height - 8) + 'px';
+}
+function hideMenu() { $('menu').hidden = true; }
+addEventListener('pointerdown', (e) => { if (!$('menu').hidden && !$('menu').contains(e.target)) hideMenu(); });
+addEventListener('blur', hideMenu);
+function songMenu(s, x, y) {
+  const items = [{ text: 'Играть', act: () => { ctx = view; pushHist(); load(s, true); } }, { label: 'Добавить в плейлист' }];
+  playlists.forEach((p) => items.push({ text: p.name, act: () => addToPl(p, s.id) }));
+  items.push({ text: '+ Новый плейлист', act: () => newPl(s) });
+  const cp = plById(view);
+  if (cp) items.push({ text: 'Убрать из этого плейлиста', bad: true, act: () => { cp.ids = cp.ids.filter((id) => id !== s.id); savePls(); renderPls(); renderSongs(); upText(); } });
+  showMenu(items, x, y);
+}
+function plMenu(p, x, y) {
+  showMenu([
+    { text: 'Играть', act: () => { const l = listOf(p.id); if (!l.length) return; view = ctx = p.id; renderPls(); renderSongs(); pushHist(); load(settings.shuffle ? l[Math.floor(Math.random() * l.length)] : l[0], true); } },
+    { text: 'Переименовать', act: async () => { const n = await askName('Название плейлиста', p.name); if (n) { p.name = n.slice(0, 60); savePls(); renderPls(); } } },
+    { text: 'Удалить плейлист', bad: true, act: () => { playlists = playlists.filter((x) => x !== p); if (view === p.id) view = 'all'; if (ctx === p.id) ctx = 'all'; savePls(); renderPls(); renderSongs(); upText(); toast('Плейлист удалён, песни остались'); } },
+  ], x, y);
+}
+
+// ==================== фон: обложка, свои картинки или градиент ====================
+const BG = Object.assign({ mode: 'cover', blur: 70, dim: 0.25, bright: 1, interval: 12, react: true, anim: true, colors: null }, settings.bg);
+let bgImgs = [], bgLayer = 0, bgTimer = 0, bgIdx = 0, bgShown = null;
+const saveBg = () => { settings.bg = BG; saveSettings(); };
+// две картинки по очереди: новая проявляется поверх старой
+function bgShow(u) {
+  if (u === bgShown) return;
+  bgShown = u;
+  const next = $(bgLayer ? 'bgA' : 'bgB'), prev = $(bgLayer ? 'bgB' : 'bgA');
+  bgLayer ^= 1;
+  next.style.backgroundImage = u ? `url("${u}")` : 'none';
+  next.classList.toggle('show', !!u);
+  prev.classList.remove('show');
+}
+function songBgUrl(s) {
+  if (!s || !s.bg) return null;
+  if (!s.bgUrl) s.bgUrl = URL.createObjectURL(s.bg);
+  return s.bgUrl;
+}
+function applyBg() {
+  const r = document.documentElement.style;
+  r.setProperty('--bg-blur', BG.blur + 'px');
+  r.setProperty('--bg-dim', BG.dim);
+  r.setProperty('--bg-bright', BG.bright);
+  r.setProperty('--bg-react', BG.react ? 0.45 : 0);
+  const cols = BG.colors || (cur && cur.pal) || ['#FF4D8D', '#7C5CFF', '#29D3C0'];
+  cols.slice(0, 3).forEach((c, i) => r.setProperty('--g' + (i + 1), c));
+  $('backdrop').classList.toggle('grad-on', BG.mode === 'gradient');
+  $('backdrop').classList.toggle('anim', !!BG.anim);
+  clearInterval(bgTimer);
+  const own = songBgUrl(cur);
+  if (BG.mode === 'gradient') bgShow(own);
+  else if (own) bgShow(own);
+  else if (BG.mode === 'images' && bgImgs.length) {
+    bgShow(bgImgs[bgIdx % bgImgs.length].url);
+    if (bgImgs.length > 1) bgTimer = setInterval(() => { bgIdx++; bgShow(bgImgs[bgIdx % bgImgs.length].url); }, BG.interval * 1000);
+  } else bgShow(cur ? cur.imgUrl || null : null);
+}
+
+const BG_RANGES = [
+  ['bgBlur', 'blur', (v) => v + ' px'],
+  ['bgDim', 'dim', (v) => Math.round(v * 100) + '%'],
+  ['bgBright', 'bright', (v) => Math.round(v * 100) + '%'],
+  ['bgInt', 'interval', (v) => v + ' с'],
+];
+function renderBgDlg() {
+  document.querySelectorAll('#bgMode button').forEach((b) => b.classList.toggle('on', b.dataset.m === BG.mode));
+  $('bgImagesBox').hidden = BG.mode !== 'images';
+  $('bgGradBox').hidden = BG.mode !== 'gradient';
+  for (const [id, key, fmt] of BG_RANGES) { $(id).value = BG[key]; $(id + 'V').textContent = fmt(BG[key]); }
+  const cols = BG.colors || (cur && cur.pal) || ['#FF4D8D', '#7C5CFF', '#29D3C0'];
+  ['g1', 'g2', 'g3'].forEach((id, i) => { $(id).value = cols[i]; });
+  $('gAuto').classList.toggle('on', !BG.colors);
+  $('gAnim').checked = !!BG.anim;
+  $('bgReact').checked = !!BG.react;
+  $('glassSel').value = settings.glass || 'liquid';
+  $('bgSong').textContent = cur && cur.bg ? 'Убрать картинку этой песни' : 'Своя картинка для этой песни';
+  $('bgSong').disabled = !cur;
+  const box = $('bgThumbs');
+  box.textContent = '';
+  bgImgs.forEach((im) => {
+    const t = document.createElement('div');
+    t.className = 'thumb';
+    t.style.backgroundImage = `url("${im.url}")`;
+    const x = document.createElement('button');
+    x.textContent = '×'; x.title = 'Убрать';
+    x.addEventListener('click', async () => { await DB.bgs.del(im.id); URL.revokeObjectURL(im.url); bgImgs = bgImgs.filter((y) => y !== im); bgShown = null; renderBgDlg(); applyBg(); });
+    t.appendChild(x);
+    box.appendChild(t);
+  });
+  const add = document.createElement('button');
+  add.className = 'thumb addT'; add.textContent = '+';
+  add.title = 'Добавить картинки';
+  add.addEventListener('click', () => $('bgFile').click());
+  box.appendChild(add);
+}
+$('bgBtn').addEventListener('click', () => { renderBgDlg(); $('bgDlg').hidden = false; });
+$('bgClose').addEventListener('click', () => { $('bgDlg').hidden = true; });
+$('bgDlg').addEventListener('click', (e) => { if (e.target === $('bgDlg')) $('bgDlg').hidden = true; });
+document.querySelectorAll('#bgMode button').forEach((b) => b.addEventListener('click', () => { BG.mode = b.dataset.m; bgShown = null; saveBg(); applyBg(); renderBgDlg(); }));
+for (const [id, key, fmt] of BG_RANGES) {
+  $(id).addEventListener('input', () => { BG[key] = Number($(id).value); $(id + 'V').textContent = fmt(BG[key]); saveBg(); if (key !== 'interval') applyBg(); });
+  if (key === 'interval') $(id).addEventListener('change', applyBg);
+}
+['g1', 'g2', 'g3'].forEach((id) => $(id).addEventListener('input', () => { BG.colors = ['g1', 'g2', 'g3'].map((g) => $(g).value); saveBg(); applyBg(); $('gAuto').classList.remove('on'); }));
+$('gAuto').addEventListener('click', () => { BG.colors = null; saveBg(); applyBg(); renderBgDlg(); });
+$('gAnim').addEventListener('change', () => { BG.anim = $('gAnim').checked; saveBg(); applyBg(); });
+$('bgReact').addEventListener('change', () => { BG.react = $('bgReact').checked; saveBg(); applyBg(); });
+$('bgFile').addEventListener('change', async (e) => {
+  for (const f of e.target.files) {
+    if (!/^image\//.test(f.type)) continue;
+    const rec = { id: 'b' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), blob: f, added: Date.now() };
+    await DB.bgs.put(rec);
+    bgImgs.push({ ...rec, url: URL.createObjectURL(f) });
+  }
+  e.target.value = '';
+  if (BG.mode !== 'images') BG.mode = 'images';
+  saveBg(); bgShown = null; applyBg(); renderBgDlg();
+});
+$('bgSong').addEventListener('click', () => {
+  if (!cur) return;
+  if (cur.bg) { if (cur.bgUrl) URL.revokeObjectURL(cur.bgUrl); cur.bg = null; cur.bgUrl = null; saveSong(cur); applyBg(); renderBgDlg(); }
+  else $('bgSongFile').click();
+});
+$('bgSongFile').addEventListener('change', (e) => {
+  const f = e.target.files[0];
+  e.target.value = '';
+  if (!f || !cur) return;
+  cur.bg = f; cur.bgUrl = null;
+  saveSong(cur); applyBg(); renderBgDlg();
+});
+$('glassSel').addEventListener('change', () => { settings.glass = $('glassSel').value; saveSettings(); lgRefresh(); });
+
+// ==================== жидкое стекло ====================
+// Панель преломляет то, что под ней: у краёв фон «затягивает», как в линзе, с лёгкой радугой.
+// Работает через SVG-фильтр в backdrop-filter — это умеет движок Chrome, на котором собран Linea.
+const NS = 'http://www.w3.org/2000/svg';
+const lgDefs = (() => { const sv = document.createElementNS(NS, 'svg'); sv.setAttribute('width', 0); sv.setAttribute('height', 0); sv.style.position = 'absolute'; const d = document.createElementNS(NS, 'defs'); sv.appendChild(d); document.body.appendChild(sv); return d; })();
+const lgEls = new Map(); // элемент -> { id, w, h }
+let lgN = 0;
+// карта смещений: R — сдвиг по x, G — по y; 128 — без сдвига. Сдвиг растёт к краю, как у толстого стекла
+function lgMap(w, h, r, bez) {
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const x = c.getContext('2d'), im = x.createImageData(w, h), d = im.data;
+  const hw = w / 2, hh = h / 2;
+  for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
+    const dx = i + 0.5 - hw, dy = j + 0.5 - hh, px = Math.abs(dx) - (hw - r), py = Math.abs(dy) - (hh - r);
+    let dist, nx = 0, ny = 0;
+    if (px > 0 && py > 0) { const l = Math.hypot(px, py) || 1; dist = r - l; nx = (px / l) * Math.sign(dx); ny = (py / l) * Math.sign(dy); }
+    else if (px > py) { dist = r - px; nx = Math.sign(dx); } else { dist = r - py; ny = Math.sign(dy); }
+    const k = (j * w + i) * 4, t = Math.max(0, 1 - dist / bez), s = t * t * (3 - 2 * t);
+    d[k] = 128 + nx * s * 127; d[k + 1] = 128 + ny * s * 127; d[k + 2] = 128; d[k + 3] = 255;
+  }
+  x.putImageData(im, 0, 0);
+  return c.toDataURL();
+}
+function lgApply(el) {
+  const w = Math.round(el.offsetWidth), h = Math.round(el.offsetHeight);
+  if (!w || !h) return;
+  let rec = lgEls.get(el);
+  if (rec && rec.w === w && rec.h === h) return;
+  if (!rec) { rec = { id: 'lg' + ++lgN }; lgEls.set(el, rec); }
+  rec.w = w; rec.h = h;
+  const r = Math.min(parseFloat(getComputedStyle(el).borderTopLeftRadius) || 0, w / 2, h / 2);
+  const bez = Math.max(8, Math.min(44, Math.min(w, h) * 0.42)), sc = Math.round(Math.min(72, bez * 1.8));
+  let f = document.getElementById(rec.id);
+  if (!f) { f = document.createElementNS(NS, 'filter'); f.id = rec.id; lgDefs.appendChild(f); }
+  for (const [k, v] of Object.entries({ x: 0, y: 0, width: w, height: h, filterUnits: 'userSpaceOnUse', primitiveUnits: 'userSpaceOnUse', 'color-interpolation-filters': 'sRGB' })) f.setAttribute(k, v);
+  const disp = (scale, res) => `<feDisplacementMap in="soft" in2="map" scale="${scale}" xChannelSelector="R" yChannelSelector="G" result="${res}"/>`;
+  // три канала смещаются чуть по-разному — получается радужная кромка
+  f.innerHTML = `<feGaussianBlur in="SourceGraphic" stdDeviation="2" result="soft"/>
+    <feImage href="${lgMap(w, h, r, bez)}" x="0" y="0" width="${w}" height="${h}" preserveAspectRatio="none" result="map"/>
+    ${disp(sc, 'dr')}${disp(Math.round(sc * 0.9), 'dg')}${disp(Math.round(sc * 0.8), 'db')}
+    <feColorMatrix in="dr" type="matrix" values="1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0" result="r"/>
+    <feColorMatrix in="dg" type="matrix" values="0 0 0 0 0 0 1 0 0 0 0 0 0 0 0 0 0 0 1 0" result="g"/>
+    <feColorMatrix in="db" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 1 0 0 0 0 0 1 0" result="b"/>
+    <feBlend in="r" in2="g" mode="screen" result="rg"/><feBlend in="rg" in2="b" mode="screen" result="rgb"/>
+    <feColorMatrix in="rgb" type="saturate" values="1.45"/>`;
+  el.style.backdropFilter = `url(#${rec.id})`;
+}
+const lgRO = new ResizeObserver((es) => { if (settings.glass === 'plain') return; es.forEach((e) => lgApply(e.target)); });
+const LG_SEL = '.side, .pill, .step, .card, .offs, .menu';
+function lgWatch(el) { el.classList.add('lg'); lgRO.observe(el); if (settings.glass !== 'plain') lgApply(el); }
+function lgRefresh() {
+  const on = settings.glass !== 'plain';
+  document.body.classList.toggle('liquid', on);
+  document.querySelectorAll(LG_SEL).forEach((el) => {
+    if (on) { lgEls.delete(el); lgWatch(el); } else { el.style.backdropFilter = ''; }
+  });
+}
+lgRefresh();
 // ==================== воспроизведение ====================
 let actx = null, analyser = null, freq = null, url = '';
 const PATH = { play: 'M8 5v14l11-7z', pause: 'M6 5h4v14H6zM14 5h4v14h-4z' };
@@ -278,9 +563,9 @@ function showSong() {
   renderLines();
 }
 function upText() {
-  const nx = cur && songs[(songs.indexOf(cur) + 1) % songs.length];
+  const q = queue(), nx = cur && q.length && q[(q.indexOf(cur) + 1) % q.length];
   $('up').textContent = '';
-  if (settings.shuffle && songs.length > 2) { $('up').textContent = 'Дальше: случайная'; return; }
+  if (settings.shuffle && q.length > 2) { $('up').textContent = 'Дальше: случайная'; return; }
   if (!nx || nx === cur) return;
   const b = document.createElement('b'); b.textContent = nx.name;
   $('up').append('Дальше: ', b);
@@ -304,7 +589,7 @@ async function load(song, autoplay) {
   applyPalette(song);
   waveDirty = true;
   $('coverImg').src = song.imgUrl;
-  $('bgImg').style.backgroundImage = `url("${song.imgUrl}")`;
+  applyBg();
   if (window.MediaMetadata) navigator.mediaSession.metadata = new MediaMetadata({ title: song.name, artist: song.artist || '', artwork: [{ src: song.imgUrl }] });
 }
 // история прослушанного: «назад» возвращает к тому, что реально играло, и в перемешке тоже
@@ -312,12 +597,13 @@ const hist = [];
 let slideDir = 0;
 function pushHist() { if (cur) { hist.push(cur); if (hist.length > 100) hist.shift(); } }
 function step(d) {
-  if (sync || !songs.length) return;
+  const q = queue().length ? queue() : songs;
+  if (sync || !q.length) return;
   if (d < 0 && audio.currentTime > 3) { audio.currentTime = 0; return; } // как в любом плеере: сначала в начало песни
   let nx = null;
   if (d < 0) while (hist.length && !nx) { const h = hist.pop(); if (songs.includes(h) && h !== cur) nx = h; }
-  if (!nx && d > 0 && settings.shuffle && songs.length > 1) do nx = songs[Math.floor(Math.random() * songs.length)]; while (nx === cur);
-  if (!nx) { const i = cur ? songs.indexOf(cur) : -1; nx = songs[(i + d + songs.length) % songs.length]; }
+  if (!nx && d > 0 && settings.shuffle && q.length > 1) do nx = q[Math.floor(Math.random() * q.length)]; while (nx === cur);
+  if (!nx) { const i = cur ? q.indexOf(cur) : -1; nx = q[(i + d + q.length) % q.length]; }
   if (d > 0) pushHist();
   slideDir = d;
   load(nx, true);
@@ -721,6 +1007,9 @@ addEventListener('mouseup', (e) => { const b = e.target.closest && e.target.clos
 addEventListener('keydown', (e) => {
   const tag = e.target.tagName;
   if (e.target.isContentEditable) return;
+  if (!$('menu').hidden && e.code === 'Escape') { hideMenu(); return; }
+  if (!$('nameDlg').hidden) return;
+  if (!$('bgDlg').hidden) { if (e.code === 'Escape') $('bgDlg').hidden = true; return; }
   if (!$('aiDlg').hidden) { if (e.code === 'Escape') $('aiDlg').hidden = true; return; }
   if (!$('findDlg').hidden) { if (e.code === 'Escape') $('findDlg').hidden = true; return; }
   if (!$('syncDlg').hidden || tag === 'TEXTAREA' || (tag === 'INPUT' && e.target.type !== 'range')) {
@@ -743,7 +1032,10 @@ addEventListener('keydown', (e) => {
 // ==================== старт ====================
 (async () => {
   setVolume(settings.volume);
+  bgImgs = (await DB.bgs.all()).sort((a, b) => a.added - b.added).map((r) => ({ ...r, url: URL.createObjectURL(r.blob) }));
+  applyBg();
   songs.push(...(await DB.all()).sort((a, b) => b.added - a.added));
+  renderPls();
   renderSongs();
   const last = songs.find((s) => s.id === store.get('ln.last', '')) || songs[0];
   if (last) load(last, false); else showSong();

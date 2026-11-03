@@ -49,8 +49,14 @@ kbd{font:700 12px var(--ui);background:var(--glass-2);border:1px solid var(--lin
 
 /* фон: обложка, сильно размытая; на ударах баса чуть вспыхивает */
 .backdrop{position:fixed;inset:0;overflow:hidden}
-.backdrop .img{position:absolute;inset:-12%;background-size:cover;background-position:center;filter:blur(70px) saturate(1.5);opacity:calc(.5 + var(--kick)*.18);transform:scale(1.1);transition:background-image .8s}
-.backdrop .shade{position:absolute;inset:0;background:radial-gradient(120% 90% at 30% 40%,transparent 0,rgba(9,9,13,.55) 55%,rgba(9,9,13,.92) 100%)}
+.backdrop .img{position:absolute;inset:-12%;background-size:cover;background-position:center;filter:blur(var(--bg-blur,70px)) saturate(1.5) brightness(var(--bg-bright,1));opacity:0;transform:scale(1.1);transition:opacity 1.4s var(--ease)}
+.backdrop .img.show{opacity:.6}
+.backdrop .grad{position:absolute;inset:-25%;opacity:0;transition:opacity 1.4s var(--ease);background:radial-gradient(38% 46% at 22% 30%,var(--g1),transparent 70%),radial-gradient(42% 50% at 78% 26%,var(--g2),transparent 70%),radial-gradient(48% 56% at 52% 82%,var(--g3),transparent 70%),#0b0b12;filter:blur(calc(var(--bg-blur,70px) * .6)) brightness(var(--bg-bright,1)) saturate(1.3)}
+.backdrop.grad-on .grad{opacity:.9}
+.backdrop.grad-on.anim .grad{animation:drift 26s ease-in-out infinite alternate}
+@keyframes drift{0%{transform:rotate(0) scale(1)}33%{transform:rotate(25deg) scale(1.15) translate(4%,-3%)}66%{transform:rotate(-15deg) scale(1.05) translate(-5%,4%)}100%{transform:rotate(40deg) scale(1.2)}}
+/* затемнение: на ударах баса чуть расступается — фон «дышит» */
+.backdrop .shade{position:absolute;inset:0;opacity:calc(1 - var(--kick) * var(--bg-react,.45));background:radial-gradient(120% 90% at 30% 40%,transparent 0,rgba(9,9,13,.5) 58%,rgba(9,9,13,.9) 100%),rgba(9,9,13,var(--bg-dim,.25))}
 
 .app{position:fixed;inset:0;display:grid;grid-template-columns:300px minmax(0,1fr);gap:18px;padding:18px;animation:fade .5s var(--ease) both}
 .glass{background:var(--glass);border:1px solid var(--line);backdrop-filter:blur(24px) saturate(1.3);border-radius:22px}
@@ -173,6 +179,69 @@ input[type=range]:hover::-webkit-slider-thumb{transform:scale(1.25)}
 .cover{cursor:ns-resize}
 .card>.find{padding:12px 14px}
 
+/* плейлисты */
+.plHead{display:flex;align-items:center;justify-content:space-between;padding:4px 4px 0;color:var(--dim);font-size:12px;letter-spacing:.08em;text-transform:uppercase}
+.plHead b{font-weight:800}
+.mini{width:28px;height:28px;border-radius:50%;background:var(--glass-2);font:800 17px var(--ui);color:var(--fg)}
+.mini:hover{background:var(--a1);color:var(--on-a1)}
+.pls{display:flex;flex-direction:column;gap:2px;max-height:34%;overflow:auto;margin:0 -6px;padding:0 6px;flex:none}
+.pl{position:relative;display:grid;grid-template-columns:40px minmax(0,1fr);grid-template-rows:auto auto;column-gap:12px;align-items:center;padding:6px;border-radius:14px;cursor:pointer;transition:background .2s,box-shadow .2s}
+.pl:hover{background:var(--glass)}
+.pl.on{background:var(--glass-2)}
+.pl.on::before{content:"";position:absolute;left:-6px;top:12px;bottom:12px;width:4px;border-radius:4px;background:var(--a1)}
+.pl.drop{box-shadow:inset 0 0 0 2px var(--a1);background:color-mix(in srgb,var(--a1) 14%,transparent)}
+.pl b{font-weight:700;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;align-self:end}
+.pl small{color:var(--dim);font-size:12px;align-self:start}
+.mos{grid-row:span 2;width:40px;height:40px;border-radius:10px;overflow:hidden;display:grid;grid-template-columns:1fr 1fr;background:linear-gradient(135deg,color-mix(in srgb,var(--a1) 60%,#222),color-mix(in srgb,var(--a2) 60%,#111))}
+.mos img{width:100%;height:100%;object-fit:cover;display:block}
+.mos.one{grid-template-columns:1fr}.mos.one img:not(:first-child){display:none}
+.mos.all{display:grid;place-items:center;grid-template-columns:1fr}
+.mos svg{width:20px;height:20px;fill:none;stroke:#fff;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.song[draggable=true]{-webkit-user-drag:element}
+/* меню по правой кнопке */
+.menu{position:fixed;z-index:8;min-width:210px;max-width:300px;padding:6px;border-radius:16px;background:rgba(24,24,32,.94);border:1px solid var(--line);box-shadow:0 20px 60px rgba(0,0,0,.5);backdrop-filter:blur(20px);animation:pop .25s var(--spring) both;display:flex;flex-direction:column}
+.menu p{padding:8px 10px 2px;color:var(--dim);font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
+.menu button{text-align:left;padding:9px 12px;border-radius:10px;font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.menu button:hover{background:var(--glass-2)}
+.menu button.bad{color:var(--bad)}
+
+/* настройки фона */
+.bgCard{max-height:calc(100vh - 32px);overflow:auto}
+.seg{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;padding:4px;border-radius:16px;background:rgba(255,255,255,.06)}
+.seg button{padding:10px 8px;border-radius:12px;font-weight:700;font-size:14px;color:var(--dim)}
+.seg button:hover{color:var(--fg)}
+.seg button.on{background:var(--a1);color:var(--on-a1)}
+.thumbs{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:8px}
+.thumb{position:relative;aspect-ratio:16/10;border-radius:12px;background:center/cover #1a1a22;overflow:hidden}
+.thumb button{position:absolute;top:4px;right:4px;width:24px;height:24px;border-radius:50%;background:rgba(0,0,0,.6);font-weight:800;opacity:0}
+.thumb:hover button,.thumb button:focus-visible{opacity:1}
+.addT{display:grid;place-items:center;border:1.5px dashed rgba(255,255,255,.25);background:none;font:24px var(--display);color:var(--dim)}
+.addT:hover{border-color:var(--a1);color:var(--a1)}
+.rng{display:grid;gap:6px;font-weight:700}
+.rng span{display:flex;justify-content:space-between}
+.rng b{color:var(--a1);font-variant-numeric:tabular-nums}
+.cols{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.cols input{width:46px;height:46px;border:0;border-radius:14px;padding:0;background:none;cursor:pointer}
+.cols input::-webkit-color-swatch-wrapper{padding:0}
+.cols input::-webkit-color-swatch{border:2px solid rgba(255,255,255,.2);border-radius:14px}
+.chipB{padding:10px 14px;border-radius:99px;background:var(--glass-2);font-weight:700;font-size:13px}
+.chipB.on{background:var(--a1);color:var(--on-a1)}
+.chk{display:flex;align-items:center;gap:10px;font-weight:700;cursor:pointer}
+.chk input{position:absolute;opacity:0}
+.chk span{width:40px;height:24px;border-radius:99px;background:rgba(255,255,255,.14);position:relative;transition:background .25s}
+.chk span::after{content:"";position:absolute;left:3px;top:3px;width:18px;height:18px;border-radius:50%;background:#fff;transition:transform .3s var(--spring)}
+.chk input:checked+span{background:var(--a1)}
+.chk input:checked+span::after{transform:translateX(16px)}
+.chk input:focus-visible+span{outline:2px solid var(--a1);outline-offset:3px}
+
+/* жидкое стекло: тонкая подложка, блик по кромке; само преломление делает фильтр из app.js */
+body.liquid .lg{background:rgba(255,255,255,.035);border-color:transparent;box-shadow:inset 1.5px 1.5px 0 -0.5px rgba(255,255,255,.55),inset -1px -1px 0 -0.5px rgba(255,255,255,.25),inset 0 0 22px rgba(255,255,255,.07),0 12px 34px rgba(0,0,0,.28)}
+body.liquid .pill.lg:hover,body.liquid .step.lg:hover{background:rgba(255,255,255,.1)}
+body.liquid .pill.ai.lg{background:color-mix(in srgb,var(--a1) 78%,transparent)}
+body.liquid .card.lg{background:rgba(20,20,28,.42)}
+body.liquid .menu.lg{background:rgba(20,20,28,.5)}
+body.liquid .over{backdrop-filter:blur(6px);background:rgba(6,6,9,.35)}
+
 /* окна */
 .over{position:fixed;inset:0;display:grid;place-items:center;padding:16px;background:rgba(6,6,9,.6);backdrop-filter:blur(14px);animation:fade .25s both;z-index:5}
 .card{background:rgba(22,22,30,.86);border:1px solid var(--line);border-radius:28px;padding:28px;width:min(560px,100%);display:flex;flex-direction:column;gap:14px;animation:pop .45s var(--spring) both;box-shadow:0 40px 100px rgba(0,0,0,.5)}
@@ -196,7 +265,7 @@ input[type=range]:hover::-webkit-slider-thumb{transform:scale(1.25)}
 </style>
 </head>
 <body>
-<div class="backdrop" aria-hidden="true"><div class="img" id="bgImg"></div><div class="shade"></div></div>
+<div class="backdrop" id="backdrop" aria-hidden="true"><div class="grad"></div><div class="img" id="bgA"></div><div class="img" id="bgB"></div><div class="shade"></div></div>
 
 <div class="app">
   <aside class="side glass" aria-label="Мои песни">
@@ -206,6 +275,8 @@ input[type=range]:hover::-webkit-slider-thumb{transform:scale(1.25)}
       <span class="plus">+</span>
       <span><b>Добавить песни</b><small>mp3, flac, wav: перетащи или нажми</small></span>
     </label>
+    <div class="plHead"><b>Плейлисты</b><button class="mini" id="plNew" title="Новый плейлист" aria-label="Новый плейлист">+</button></div>
+    <div class="pls" id="pls"></div>
     <input class="find" id="find" placeholder="Поиск по песням" spellcheck="false" aria-label="Поиск по песням">
     <div class="songs" id="songs"></div>
   </aside>
@@ -214,6 +285,7 @@ input[type=range]:hover::-webkit-slider-thumb{transform:scale(1.25)}
     <header class="top">
       <button class="pill" id="libBtn">Песни</button>
       <span class="grow"></span>
+      <button class="pill" id="bgBtn">Фон</button>
       <button class="pill ai" id="aiBtn">Распознать слова</button>
       <span class="offs" id="offs" hidden title="Если слова спешат или опаздывают"><button id="offM" aria-label="Слова раньше">−</button><b id="offV">0.0 с</b><button id="offP" aria-label="Слова позже">+</button></span>
       <button class="pill" id="findLrc">Найти слова</button>
@@ -282,6 +354,40 @@ input[type=range]:hover::-webkit-slider-thumb{transform:scale(1.25)}
     <p>Для мешапа или ремикса впиши оригинал: «Исполнитель — Песня». Если слова с таймингами не подойдут по длине, найдётся текст, и его останется разметить.</p>
     <input class="find" id="findQ" spellcheck="false" placeholder="Исполнитель — Песня">
     <div class="acts"><button class="main" id="findGo">Искать</button><button id="findCancel">Отмена</button></div>
+  </div>
+</div>
+
+<div class="menu" id="menu" role="menu" hidden></div>
+
+<div class="over" id="bgDlg" hidden>
+  <div class="card bgCard">
+    <h3>Фон и вид</h3>
+    <div class="seg" id="bgMode"><button data-m="cover">Обложка песни</button><button data-m="images">Свои картинки</button><button data-m="gradient">Градиент</button></div>
+    <div id="bgImagesBox">
+      <div class="thumbs" id="bgThumbs"></div>
+      <label class="rng"><span>Смена картинки каждые <b id="bgIntV"></b></span><input type="range" id="bgInt" min="3" max="60" step="1"></label>
+    </div>
+    <div id="bgGradBox">
+      <div class="cols"><input type="color" id="g1" aria-label="Цвет 1"><input type="color" id="g2" aria-label="Цвет 2"><input type="color" id="g3" aria-label="Цвет 3"><button class="chipB" id="gAuto">Цвета из обложки</button></div>
+      <label class="chk"><input type="checkbox" id="gAnim"><span></span>Переливается</label>
+    </div>
+    <label class="rng"><span>Размытие <b id="bgBlurV"></b></span><input type="range" id="bgBlur" min="0" max="120" step="2"></label>
+    <label class="rng"><span>Затемнение <b id="bgDimV"></b></span><input type="range" id="bgDim" min="0" max="0.9" step="0.05"></label>
+    <label class="rng"><span>Яркость <b id="bgBrightV"></b></span><input type="range" id="bgBright" min="0.5" max="1.5" step="0.05"></label>
+    <label class="chk"><input type="checkbox" id="bgReact"><span></span>Фон дышит под бас</label>
+    <div class="acts"><button id="bgSong">Своя картинка для этой песни</button></div>
+    <label class="field">Стекло<select id="glassSel"><option value="liquid">Жидкое: преломляет фон, как линза</option><option value="plain">Обычное: размытое, легче для слабых компьютеров</option></select></label>
+    <div class="acts"><button class="main" id="bgClose">Готово</button></div>
+  </div>
+</div>
+<input type="file" id="bgFile" accept="image/*" multiple hidden>
+<input type="file" id="bgSongFile" accept="image/*" hidden>
+
+<div class="over" id="nameDlg" hidden>
+  <div class="card">
+    <h3 id="nameTitle">Новый плейлист</h3>
+    <input class="find" id="nameIn" maxlength="60" spellcheck="false">
+    <div class="acts"><button class="main" id="nameOk">Готово</button><button id="nameCancel">Отмена</button></div>
   </div>
 </div>
 
