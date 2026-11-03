@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self'">
+<title>Linea</title>
+<style>
+@font-face{font-family:"Dela Gothic One";font-weight:400;font-display:block;src:url(fonts/dela-gothic-one-cyrillic-400-normal.woff2) format("woff2");unicode-range:U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116}
+@font-face{font-family:"Dela Gothic One";font-weight:400;font-display:block;src:url(fonts/dela-gothic-one-latin-400-normal.woff2) format("woff2");unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+20AC,U+2122,U+2190-2193,U+2212}
+@font-face{font-family:"Onest";font-weight:400;font-display:block;src:url(fonts/onest-cyrillic-400-normal.woff2) format("woff2");unicode-range:U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116}
+@font-face{font-family:"Onest";font-weight:400;font-display:block;src:url(fonts/onest-latin-400-normal.woff2) format("woff2");unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+20AC,U+2122,U+2190-2193,U+2212}
+@font-face{font-family:"Onest";font-weight:500;font-display:block;src:url(fonts/onest-cyrillic-500-normal.woff2) format("woff2");unicode-range:U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116}
+@font-face{font-family:"Onest";font-weight:500;font-display:block;src:url(fonts/onest-latin-500-normal.woff2) format("woff2");unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+20AC,U+2122,U+2190-2193,U+2212}
+@font-face{font-family:"Onest";font-weight:600;font-display:block;src:url(fonts/onest-cyrillic-600-normal.woff2) format("woff2");unicode-range:U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116}
+@font-face{font-family:"Onest";font-weight:600;font-display:block;src:url(fonts/onest-latin-600-normal.woff2) format("woff2");unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+20AC,U+2122,U+2190-2193,U+2212}
+@font-face{font-family:"Onest";font-weight:700;font-display:block;src:url(fonts/onest-cyrillic-700-normal.woff2) format("woff2");unicode-range:U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116}
+@font-face{font-family:"Onest";font-weight:700;font-display:block;src:url(fonts/onest-latin-700-normal.woff2) format("woff2");unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+20AC,U+2122,U+2190-2193,U+2212}
+@font-face{font-family:"Onest";font-weight:800;font-display:block;src:url(fonts/onest-cyrillic-800-normal.woff2) format("woff2");unicode-range:U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116}
+@font-face{font-family:"Onest";font-weight:800;font-display:block;src:url(fonts/onest-latin-800-normal.woff2) format("woff2");unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+20AC,U+2122,U+2190-2193,U+2212}
+/* Linea: весь плеер красится в цвета обложки текущей песни */
+:root{
+  color-scheme:dark;
+  --ink:#09090D;
+  --glass:rgba(255,255,255,.065);
+  --glass-2:rgba(255,255,255,.11);
+  --line:rgba(255,255,255,.11);
+  --fg:#F6F5FA;
+  --dim:rgba(246,245,250,.62);
+  --a1:#FF4D8D; --a2:#7C5CFF; --a3:#29D3C0; --on-a1:#14060B;
+  --bad:#FF5468;
+  --display:"Dela Gothic One","Arial Black",system-ui,sans-serif;
+  --ui:"Onest","Segoe UI",system-ui,sans-serif;
+  --ease:cubic-bezier(.22,1,.36,1);
+  --spring:cubic-bezier(.34,1.56,.64,1);
+  --kick:0;
+}
+[hidden]{display:none!important}
+h1,h2,h3,p{margin:0}
+html,body{height:100%}
+body{margin:0;background:var(--ink);color:var(--fg);font:500 15px/1.5 var(--ui);overflow:hidden;user-select:none}
+button,input{font:inherit;color:inherit}
+button{cursor:pointer;border:0;background:none;transition:transform .18s var(--ease),background .25s,color .25s,border-color .25s,box-shadow .3s,opacity .2s}
+button:active:not(:disabled){transform:scale(.96)}
+:focus-visible{outline:2px solid var(--a1);outline-offset:3px}
+kbd{font:700 12px var(--ui);background:var(--glass-2);border:1px solid var(--line);border-radius:6px;padding:0 6px;color:var(--fg)}
+@keyframes fade{from{opacity:0}}
+@keyframes rise{from{opacity:0;transform:translateY(16px);filter:blur(8px)}}
+@keyframes pop{from{opacity:0;transform:scale(.94) translateY(12px)}}
+
+/* фон: обложка, сильно размытая; на ударах баса чуть вспыхивает */
+.backdrop{position:fixed;inset:0;overflow:hidden}
+.backdrop .img{position:absolute;inset:-12%;background-size:cover;background-position:center;filter:blur(70px) saturate(1.5);opacity:calc(.5 + var(--kick)*.18);transform:scale(1.1);transition:background-image .8s}
+.backdrop .shade{position:absolute;inset:0;background:radial-gradient(120% 90% at 30% 40%,transparent 0,rgba(9,9,13,.55) 55%,rgba(9,9,13,.92) 100%)}
+
+.app{position:fixed;inset:0;display:grid;grid-template-columns:300px minmax(0,1fr);gap:18px;padding:18px;animation:fade .5s var(--ease) both}
+.glass{background:var(--glass);border:1px solid var(--line);backdrop-filter:blur(24px) saturate(1.3);border-radius:22px}
+.pill{padding:9px 16px;border-radius:99px;background:var(--glass);border:1px solid var(--line);font-weight:700;font-size:14px;backdrop-filter:blur(16px)}
+.pill:hover{background:var(--glass-2)}
+
+/* ---------- библиотека ---------- */
+.side{display:flex;flex-direction:column;gap:10px;min-height:0;padding:14px}
+.brand{display:flex;align-items:center;gap:10px;font:22px var(--display);letter-spacing:-.01em;padding:2px 4px 6px}
+.brand svg{width:34px;height:34px;filter:drop-shadow(0 0 12px color-mix(in srgb,var(--a1) 60%,transparent));transition:filter .6s}
+.add{position:relative;display:flex;gap:12px;align-items:center;padding:10px;border-radius:16px;border:1.5px dashed rgba(255,255,255,.22);cursor:pointer;transition:border-color .2s,background .2s}
+.add:hover,.add.over{border-color:var(--a1);background:color-mix(in srgb,var(--a1) 10%,transparent)}
+.add .plus{flex:none;width:40px;height:40px;border-radius:12px;background:var(--a1);color:var(--on-a1);display:grid;place-items:center;font:22px var(--display);transition:background .6s}
+.add b{display:block;font-weight:800}
+.add small{color:var(--dim);font-size:12px}
+.add input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.find{background:rgba(255,255,255,.06);border:1px solid var(--line);border-radius:12px;padding:8px 12px;font-weight:600;outline:0;user-select:text}
+.find:focus{border-color:color-mix(in srgb,var(--a1) 60%,transparent)}
+.songs{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:2px;margin:0 -6px;padding:0 6px}
+.song{position:relative;display:grid;grid-template-columns:44px minmax(0,1fr) auto;gap:0 12px;align-items:center;padding:7px;border-radius:14px;cursor:pointer;animation:rise .45s var(--ease) both;animation-delay:calc(var(--i,0)*30ms)}
+.song:hover{background:var(--glass)}
+.song.on{background:var(--glass-2)}
+.song.on::before{content:"";position:absolute;left:-6px;top:12px;bottom:12px;width:4px;border-radius:4px;background:var(--a1)}
+.song img{grid-row:span 2;width:44px;height:44px;border-radius:10px;object-fit:cover;background:#1a1a22}
+.song b{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.song small{color:var(--dim);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.song .del{grid-row:span 2;width:30px;height:30px;border-radius:99px;color:var(--dim);display:grid;place-items:center;font-size:18px;line-height:1;opacity:0}
+.song:hover .del,.song .del:focus-visible{opacity:1}
+.song .del:hover{background:rgba(255,84,104,.18);color:var(--bad)}
+.song .del.sure{opacity:1;width:auto;padding:0 10px;font-size:12px;font-weight:800;background:rgba(255,84,104,.2);color:var(--bad)}
+.side .none{color:var(--dim);font-size:13px;padding:8px 4px}
+
+/* ---------- сейчас играет ---------- */
+.now{display:flex;flex-direction:column;gap:14px;min-width:0;min-height:0}
+.top{display:flex;gap:8px;align-items:center}
+.grow{flex:1}
+.stage{flex:1;min-height:0;display:grid;grid-template-columns:minmax(240px,400px) minmax(0,1fr);gap:clamp(24px,4.5vw,64px);align-items:center;padding:0 clamp(0px,1.5vw,24px)}
+.left{display:flex;flex-direction:column;gap:16px;min-width:0}
+.cover{position:relative;width:100%;max-width:min(400px,46vh);aspect-ratio:1;border-radius:28px;overflow:hidden;background:#15151c;transform:scale(calc(1 + var(--kick)*.045));transition:transform .08s linear,box-shadow .6s;box-shadow:0 30px 90px calc(-10px + var(--kick)*30px) color-mix(in srgb,var(--a1) calc(38% + var(--kick)*40%),transparent),0 0 0 1px rgba(255,255,255,.08)}
+.cover img{width:100%;height:100%;object-fit:cover;display:block}
+.meta.swap>*{animation:rise .6s var(--ease) both}
+.meta.swap>:nth-child(2){animation-delay:.05s}
+.meta h1{font:clamp(24px,2.6vw,36px)/1.08 var(--display);letter-spacing:-.02em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.meta p{color:var(--dim);font-size:16px;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.seek{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:center;font:600 13px var(--ui);color:var(--dim);font-variant-numeric:tabular-nums}
+input[type=range]{appearance:none;height:6px;margin:0;border-radius:99px;background:linear-gradient(90deg,var(--a1) var(--pos,0%),rgba(255,255,255,.14) var(--pos,0%));cursor:pointer}
+input[type=range]::-webkit-slider-thumb{appearance:none;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 0 0 4px color-mix(in srgb,var(--a1) 45%,transparent);transition:transform .2s var(--spring)}
+input[type=range]:hover::-webkit-slider-thumb{transform:scale(1.25)}
+.btns{display:flex;align-items:center;justify-content:center;gap:18px}
+.btns button{display:grid;place-items:center;border-radius:50%}
+.btns svg{width:26px;height:26px;fill:currentColor}
+.step{width:54px;height:54px;background:var(--glass-2);border:1px solid var(--line)}
+.step:hover{background:rgba(255,255,255,.17)}
+#play{width:74px;height:74px;background:var(--a1);color:var(--on-a1);box-shadow:0 14px 40px -6px color-mix(in srgb,var(--a1) 70%,transparent);transition:transform .25s var(--spring),background .6s,box-shadow .6s}
+#play svg{width:32px;height:32px}
+#play:hover{transform:scale(1.06)}
+.vol{display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px;align-items:center;max-width:220px;width:100%;margin:0 auto;color:var(--dim)}
+.vol svg{width:18px;height:18px;fill:currentColor}
+.up{text-align:center;color:var(--dim);font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.up b{color:var(--fg);font-weight:700}
+
+/* ---------- слова: караоке ---------- */
+.lyr{position:relative;height:100%;min-height:0;overflow:hidden;-webkit-mask-image:linear-gradient(transparent,#000 22%,#000 70%,transparent);mask-image:linear-gradient(transparent,#000 22%,#000 70%,transparent)}
+.lines{position:absolute;left:0;right:0;top:40%;display:flex;flex-direction:column;gap:clamp(10px,1.6vh,20px);transition:transform .7s var(--ease)}
+.ln{font:800 clamp(22px,2.7vw,42px)/1.18 var(--ui);letter-spacing:-.015em;color:rgba(246,245,250,.28);text-wrap:balance;cursor:pointer;transform-origin:left center;transition:color .4s,filter .5s,transform .6s var(--ease);filter:blur(1.5px)}
+.ln:hover{color:rgba(246,245,250,.55);filter:none}
+.ln.past{color:rgba(246,245,250,.4)}
+.ln.on{filter:none;transform:scale(1.04);color:transparent;background:linear-gradient(90deg,#fff calc(var(--p,0)*100%),rgba(255,255,255,.42) calc(var(--p,0)*100% + 8%));-webkit-background-clip:text;background-clip:text}
+.ln.gap{font-size:clamp(18px,2vw,28px);letter-spacing:.3em}
+.empty{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;gap:14px;max-width:480px;animation:rise .6s var(--ease) both}
+.empty h2{font:clamp(26px,2.6vw,38px)/1.1 var(--display);letter-spacing:-.01em}
+.empty p{color:var(--dim)}
+.acts{display:flex;gap:8px;flex-wrap:wrap}
+.acts button{padding:12px 20px;border-radius:99px;font-weight:800;background:var(--glass-2);border:1px solid var(--line)}
+.acts button:hover{background:rgba(255,255,255,.17)}
+.acts button.main{background:var(--a1);color:var(--on-a1);border-color:transparent}
+/* разметка: подсвечена строка, которую ждём; пробел — в момент, когда её начинают петь */
+.syncing .ln{filter:none}
+.syncing .ln.next{color:#fff;transform:scale(1.04)}
+.syncing .ln.next::after{content:"  ← пробел";font:700 .45em var(--ui);color:var(--a1);letter-spacing:.04em;vertical-align:middle}
+.syncBar{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+.syncBar button{padding:10px 16px;border-radius:99px;font-weight:800;background:var(--glass-2);border:1px solid var(--line)}
+.syncBar .main{background:var(--a1);color:var(--on-a1);padding:14px 26px;font-size:16px}
+.foot{display:flex;flex-wrap:wrap;gap:6px 16px;color:var(--dim);font-size:13px}
+
+/* окна */
+.over{position:fixed;inset:0;display:grid;place-items:center;padding:16px;background:rgba(6,6,9,.6);backdrop-filter:blur(14px);animation:fade .25s both;z-index:5}
+.card{background:rgba(22,22,30,.86);border:1px solid var(--line);border-radius:28px;padding:28px;width:min(560px,100%);display:flex;flex-direction:column;gap:14px;animation:pop .45s var(--spring) both;box-shadow:0 40px 100px rgba(0,0,0,.5)}
+.card h3{font:26px var(--display);letter-spacing:-.01em}
+.card p{color:var(--dim)}
+.card textarea{min-height:240px;resize:vertical;background:rgba(255,255,255,.06);border:1px solid var(--line);border-radius:14px;padding:12px;color:var(--fg);font:500 14px/1.5 var(--ui);user-select:text;outline:0}
+.bar{height:8px;border-radius:99px;background:rgba(255,255,255,.08);overflow:hidden}
+.bar i{display:block;height:100%;width:0;border-radius:99px;background:var(--a1);transition:width .2s}
+.toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);padding:10px 18px;border-radius:99px;background:rgba(22,22,30,.92);border:1px solid var(--line);font-weight:700;z-index:6;animation:pop .35s var(--spring) both}
+
+/* узкое окно: библиотека выезжает по кнопке */
+#libBtn{display:none}
+@media (max-width:1100px){
+  .app{grid-template-columns:minmax(0,1fr)}
+  .side{position:fixed;z-index:4;left:18px;top:18px;bottom:18px;width:300px;background:rgba(18,18,26,.94);transform:translateX(calc(-100% - 30px));transition:transform .45s var(--ease)}
+  body.lib .side{transform:none}
+  #libBtn{display:block}
+}
+@media (max-height:680px){.cover{max-width:36vh}.left{gap:10px}#play{width:60px;height:60px}.step{width:46px;height:46px}.foot{display:none}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="backdrop" aria-hidden="true"><div class="img" id="bgImg"></div><div class="shade"></div></div>
+
+<div class="app">
+  <aside class="side glass" aria-label="Мои песни">
+    <div class="brand"><svg viewBox="0 0 48 48" aria-hidden="true"><rect x="3" y="3" width="42" height="42" rx="13" fill="var(--a1)"/><rect x="11" y="13" width="16" height="4.5" rx="2.25" fill="#fff" opacity=".55"/><rect x="11" y="21.75" width="26" height="4.5" rx="2.25" fill="#fff"/><rect x="11" y="30.5" width="20" height="4.5" rx="2.25" fill="#fff" opacity=".55"/></svg>Linea</div>
+    <label class="add" id="drop">
+      <input type="file" id="file" accept="audio/*,.mp3,.ogg,.wav,.flac,.m4a" multiple>
+      <span class="plus">+</span>
+      <span><b>Добавить песни</b><small>mp3, flac, wav: перетащи или нажми</small></span>
+    </label>
+    <input class="find" id="find" placeholder="Поиск по песням" spellcheck="false" aria-label="Поиск по песням">
+    <div class="songs" id="songs"></div>
+  </aside>
+
+  <main class="now">
+    <header class="top">
+      <button class="pill" id="libBtn">Песни</button>
+      <span class="grow"></span>
+      <button class="pill" id="findLrc">Найти слова</button>
+      <button class="pill" id="editLrc">Разметить слова</button>
+      <button class="pill" id="fileLrc">Файл .lrc</button>
+    </header>
+    <section class="stage">
+      <section class="left">
+        <div class="cover"><img id="coverImg" alt=""></div>
+        <div class="meta" id="meta"><h1 id="title">Linea</h1><p id="artist">Добавь песни слева</p></div>
+        <div class="seek"><span id="cur">0:00</span><input type="range" id="seek" min="0" max="1000" value="0" aria-label="Перемотка"><span id="dur">0:00</span></div>
+        <div class="btns">
+          <button class="step" id="prev" aria-label="Предыдущая"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5h2v14H6zM20 5v14L9 12z"/></svg></button>
+          <button id="play" aria-label="Играть"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg></button>
+          <button class="step" id="next" aria-label="Следующая"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 5h2v14h-2zM4 5v14l11-7z"/></svg></button>
+        </div>
+        <label class="vol"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9zm12.5 3a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4z"/></svg><input type="range" id="vol" min="0" max="1" step="0.05" aria-label="Громкость"></label>
+        <p class="up" id="up"></p>
+        <div class="syncBar" id="syncBar" hidden><button class="main" id="syncTap">Строка!</button><button id="syncUndo">Назад</button><button id="syncStop">Отмена</button></div>
+      </section>
+      <section class="lyr" id="lyr"><div class="lines" id="lines"></div>
+        <div class="empty" id="empty" hidden>
+          <h2 id="emptyTitle">Песен пока нет</h2>
+          <p id="emptyText"></p>
+          <div class="acts" id="emptyActs"><button class="main" id="emptySync">Вставить текст и разметить</button><button id="emptyFind">Найти в интернете</button></div>
+        </div>
+      </section>
+    </section>
+    <footer class="foot"><span><kbd>←</kbd> <kbd>→</kbd> песни</span><span><kbd>Пробел</kbd> пауза</span><span><kbd>↑</kbd> <kbd>↓</kbd> громкость</span><span>Медиа-клавиши работают, даже когда окно свёрнуто</span></footer>
+  </main>
+</div>
+
+<input type="file" id="lrcFile" accept=".lrc,.txt,text/plain" hidden>
+
+<div class="over" id="syncDlg" hidden>
+  <div class="card">
+    <h3>Текст песни</h3>
+    <p>Каждая строка песни — с новой строки. Потом песня начнётся сначала, а ты жми <kbd>Пробел</kbd> (или кнопку «Строка!»), когда начинают петь очередную строку. Ошибся — <kbd>Backspace</kbd>.</p>
+    <textarea id="syncText" spellcheck="false" placeholder="Вставь сюда текст песни"></textarea>
+    <div class="acts"><button class="main" id="syncGo">Разметить</button><button id="syncClear" hidden>Убрать слова</button><button id="syncCancel">Отмена</button></div>
+  </div>
+</div>
+
+<div class="over" id="loading" hidden>
+  <div class="card"><h3 id="loadTitle"></h3><p id="loadText"></p><div class="bar"><i id="loadBar"></i></div></div>
+</div>
+
+<script src="lib.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
