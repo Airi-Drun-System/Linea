@@ -399,6 +399,17 @@ $('srcLink').addEventListener('click', () => { if (cur && cur.kind) window.open(
 // источники — открытые страницы SoundCloud (артисты, плейлисты, лайки); играют официальным плеером
 const FEED_BASE = [
   { id: 'mine', name: 'Артисты из моих песен' },
+  // фонк: большие открытые плейлисты SoundCloud и YouTube (проверены в ноябре 2026)
+  { id: 'phonk', name: 'Фонк', urls: [
+    'https://soundcloud.com/daithan-841369678/sets/phonk-2025',
+    'https://soundcloud.com/db8splwu1i5t/sets/ykt0mjsjlomt',
+    'https://soundcloud.com/artoricast/sets/aggressive-brazilian-gym-phonk',
+    'https://soundcloud.com/tyler-durden-639992246/sets/absolute-gym-phonk',
+    'https://soundcloud.com/misha-739253814/sets/untitled-playlist',
+    'https://www.youtube.com/playlist?list=PLliiMqsVIF-OPMfR4mlwvdVLMp9ko0QKY',
+    'https://www.youtube.com/playlist?list=PLNrz3YPMGMM6uvULJYIdLFflAi_xxah0x',
+    'https://www.youtube.com/playlist?list=PLGBKsNyGY-afmc5ff3n1HOYGTmZO1xJGw',
+  ] },
   { id: 'ncs', name: 'NCS', url: 'https://soundcloud.com/nocopyrightsounds' },
   { id: 'mcat', name: 'Monstercat', url: 'https://soundcloud.com/monstercat' },
   { id: 'chill', name: 'Chillhop', url: 'https://soundcloud.com/chillhopdotcom' },
@@ -414,13 +425,15 @@ const myArtists = () => [...new Set(songs.filter((x) => x.kind === 'sc' && /^htt
 async function feedFill() {
   if (feedBusy) return feedBusy;
   feedBusy = (async () => {
-    const urls = feedSrcs().flatMap((x) => (x.id === 'mine' ? myArtists() : [x.url]));
+    const urls = feedSrcs().flatMap((x) => (x.id === 'mine' ? myArtists() : x.urls || [x.url]));
     const batch = [];
     for (let tries = 0; tries < 5 && urls.length; tries++) {
       const url = urls.splice(Math.floor(Math.random() * urls.length), 1)[0];
-      if (!feedLists.has(url)) feedLists.set(url, (await netList('sc', url)).items || []);
+      // источник — плейлист SoundCloud или YouTube
+      const p = parseNetUrl(url), kind = p && p.kind === 'yt' ? 'yt' : 'sc';
+      if (!feedLists.has(url)) feedLists.set(url, (await netList(kind, kind === 'yt' ? p.list : url)).items || []);
       const have = new Set([...songs, ...feed].map((x) => x.id).concat(batch.map(netId)));
-      const pool = feedLists.get(url).map((it) => Object.assign({ kind: 'sc' }, it)).filter((it) => !have.has(netId(it)) && !seen.has(netId(it)));
+      const pool = feedLists.get(url).map((it) => Object.assign({ kind }, it)).filter((it) => !have.has(netId(it)) && !seen.has(netId(it)));
       pool.sort(() => Math.random() - 0.5).sort((a, b) => !!b.title - !!a.title); // с названием — вперёд
       batch.push(...pool.slice(0, 4)); // по чуть-чуть из нескольких источников, чтобы лента была разной
       if (batch.length >= 10) break;
@@ -474,7 +487,7 @@ function renderFeedSrc() {
     const b = document.createElement('button');
     b.className = 'chip' + (settings.feedOff.includes(x.id) ? '' : ' on');
     b.textContent = x.name;
-    b.title = x.id === 'mine' ? 'Авторы треков SoundCloud, которые ты уже добавил' : x.url;
+    b.title = x.id === 'mine' ? 'Авторы треков SoundCloud, которые ты уже добавил' : x.urls ? 'Плейлисты SoundCloud и YouTube' : x.url;
     b.addEventListener('click', () => {
       settings.feedOff = settings.feedOff.includes(x.id) ? settings.feedOff.filter((i) => i !== x.id) : [...settings.feedOff, x.id];
       saveSettings(); renderFeedSrc();
@@ -487,9 +500,9 @@ $('feedAdd').addEventListener('click', async () => {
   const v = await askName('Источник для ленты', '');
   const p = v && parseNetUrl(v);
   if (!v) return;
-  if (!p || p.kind !== 'sc') { toast('Нужна ссылка SoundCloud: артист, плейлист или чьи-то лайки'); return; }
-  const url = p.short ? await window.lnApp.netFinal(p.url) : p.url;
-  const o = await window.lnApp.oembed('sc', url).catch(() => null);
+  if (!p || !(p.kind === 'sc' || (p.kind === 'yt' && p.list))) { toast('Нужна ссылка: артист, плейлист или лайки SoundCloud либо плейлист YouTube'); return; }
+  const url = p.kind === 'yt' ? `https://www.youtube.com/playlist?list=${p.list}` : p.short ? await window.lnApp.netFinal(p.url) : p.url;
+  const o = await window.lnApp.oembed(p.kind, url).catch(() => null);
   let name = (o && (o.author_name && url.split('/').length <= 4 ? o.author_name : o.title)) || url.split('/').slice(3).join('/');
   if (o && o.author_name && name.endsWith(' by ' + o.author_name)) name = name.slice(0, -(' by ' + o.author_name).length);
   settings.feedOwn.push({ id: 'o' + Date.now().toString(36), name: name.slice(0, 30), url });
