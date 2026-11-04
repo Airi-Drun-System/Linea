@@ -425,6 +425,7 @@ function renderBgDlg() {
   $('bgReact').checked = !!BG.react;
   $('glassSel').value = settings.glass || 'liquid';
   $('xfSel').value = String(settings.xfade || 0);
+  $('fxSel').value = settings.fx || 'snow';
   $('keysG').checked = settings.globalKeys !== false;
   $('ovOn').checked = !!settings.overlay;
   $('ovMove').hidden = !settings.overlay;
@@ -1013,9 +1014,50 @@ $('kar').addEventListener('click', () => {
 });
 $('sepGo').addEventListener('click', sepRun);
 $('sepCancel').addEventListener('click', () => { $('sepDlg').hidden = true; });
+
+// ==================== частицы на фоне: снег или пылинки ====================
+const fxCv = $('fx'), fxG = fxCv.getContext('2d');
+let fxParts = [], fxW = 0, fxH = 0;
+function fxResize() {
+  const dpr = Math.min(devicePixelRatio || 1, 1.5);
+  fxW = innerWidth; fxH = innerHeight;
+  fxCv.width = Math.round(fxW * dpr); fxCv.height = Math.round(fxH * dpr);
+  fxG.setTransform(dpr, 0, 0, dpr, 0, 0);
+  // количество от площади окна: на большом экране не пусто, на маленьком не каша
+  const n = Math.round(Math.min(180, (fxW * fxH) / 9000));
+  fxParts = Array.from({ length: n }, () => fxNew(true));
+}
+function fxNew(anywhere) {
+  const z = Math.random(); // глубина: дальние мельче, медленнее и тусклее
+  return { x: Math.random() * fxW, y: anywhere ? Math.random() * fxH : -10, z, r: 0.8 + z * 2.6, vy: 14 + z * 46, ph: Math.random() * 6.28, sw: 8 + Math.random() * 22, a: 0.25 + z * 0.6 };
+}
+let fxLast = performance.now();
+function fxFrame(now) {
+  const mode = settings.fx || 'snow';
+  const dt = Math.min(0.05, (now - fxLast) / 1000);
+  fxLast = now;
+  fxG.clearRect(0, 0, fxW, fxH);
+  if (mode === 'off') return;
+  const boost = 1 + kick * 1.8; // на ударах баса частицы чуть ускоряются и ярче
+  const col = mode === 'dust' ? getComputedStyle(document.documentElement).getPropertyValue('--a1').trim() || '#fff' : '#fff';
+  fxG.fillStyle = col;
+  for (const p of fxParts) {
+    p.ph += dt * 0.8;
+    if (mode === 'snow') { p.y += p.vy * dt * boost; p.x += Math.sin(p.ph) * p.sw * dt; if (p.y > fxH + 10) Object.assign(p, fxNew(false)); }
+    else { p.y -= p.vy * 0.35 * dt * boost; p.x += Math.sin(p.ph) * p.sw * 0.5 * dt; if (p.y < -10) Object.assign(p, fxNew(false), { y: fxH + 10 }); }
+    if (p.x < -10) p.x = fxW + 10; else if (p.x > fxW + 10) p.x = -10;
+    fxG.globalAlpha = Math.min(1, p.a * (mode === 'dust' ? 0.7 + 0.3 * Math.sin(p.ph * 3) : 1) * (0.85 + kick * 0.4));
+    fxG.beginPath(); fxG.arc(p.x, p.y, p.r, 0, 6.283); fxG.fill();
+  }
+  fxG.globalAlpha = 1;
+}
+addEventListener('resize', fxResize);
+fxResize();
+$('fxSel').addEventListener('change', () => { settings.fx = $('fxSel').value; saveSettings(); });
 // ==================== кадр: перемотка, бас, строка ====================
-function frame() {
+function frame(now) {
   requestAnimationFrame(frame);
+  fxFrame(now || performance.now());
   const t = audio.currentTime * 1000;
   if (!seeking && cur) {
     const v = audio.duration ? audio.currentTime / audio.duration : 0;
