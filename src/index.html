@@ -150,6 +150,14 @@ body.lib .scrim{opacity:1;pointer-events:auto}
 .netBtn{padding:10px 12px;border-radius:14px;background:var(--glass-2);border:1px solid var(--line);font:700 13px var(--ui);color:var(--fg);text-align:left}
 .netBtn:hover{background:rgba(var(--fg-rgb),.17)}
 .card .small{font-size:13px}
+.feedBox{display:grid;gap:8px;padding:10px;border-radius:14px;background:var(--glass)}
+.feedBox small{color:var(--dim);font-size:12px}
+.feedSrc,.feedActs{display:flex;flex-wrap:wrap;gap:6px}
+.chip{padding:6px 11px;border-radius:99px;background:var(--glass-2);border:1px solid var(--line);font:700 12px var(--ui);color:var(--dim)}
+.chip:hover{color:var(--fg)}
+.chip.on{background:var(--a1);color:var(--on-a1);border-color:transparent}
+.mode.like svg{fill:none;stroke:currentColor;stroke-width:2}
+.mode.like[aria-pressed=true] svg{fill:var(--a1);stroke:var(--a1)}
 .meta.swap>*{animation:rise .6s var(--ease) both}
 .meta.swap>:nth-child(2){animation-delay:.05s}
 .meta h1{font:clamp(24px,2.6vw,36px)/1.08 var(--display);letter-spacing:-.02em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -348,6 +356,11 @@ body.liquid .over{backdrop-filter:blur(6px);background:rgba(var(--shade-rgb),.35
   <button class="netBtn" id="urlBtn">Из интернета: SoundCloud, YouTube, ссылка</button>
   <div class="plHead"><b>Плейлисты</b><button class="mini" id="plNew" title="Новый плейлист" aria-label="Новый плейлист">+</button></div>
   <div class="pls" id="pls"></div>
+  <div class="feedBox" id="feedBox" hidden>
+    <small>Откуда брать песни. Правый клик по своему источнику — убрать.</small>
+    <div class="feedSrc" id="feedSrc"></div>
+    <div class="feedActs"><button class="chip" id="feedAdd">+ Свой источник</button><button class="chip" id="feedNew">Новая лента</button></div>
+  </div>
   <input class="find" id="find" placeholder="Поиск по песням" spellcheck="false" aria-label="Поиск по песням">
   <div class="songs" id="songs"></div>
 </aside>
@@ -378,6 +391,7 @@ body.liquid .over{backdrop-filter:blur(6px);background:rgba(var(--shade-rgb),.35
           <label class="vol"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9zm12.5 3a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4z"/></svg><input type="range" id="vol" min="0" max="1" step="0.05" aria-label="Громкость"></label>
           <button class="mode spd" id="spd" title="Скорость">Обычная</button>
           <button class="mode lyrB" id="lyrBtn" aria-pressed="true" title="Слова или обложка" hidden>Слова</button>
+          <button class="mode like" id="like" aria-pressed="false" title="Сохранить в Мои песни" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20.5 4.6 13.3A4.8 4.8 0 0 1 12 6.9a4.8 4.8 0 0 1 7.4 6.4z"/></svg></button>
           <button class="mode kar pcOnly" id="kar" aria-pressed="false" title="Убрать голос из песни (нейросеть)">Минус</button>
         </div>
     <p class="up" id="up"></p>

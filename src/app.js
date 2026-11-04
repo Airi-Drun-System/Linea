@@ -155,6 +155,7 @@ function songImage(song) {
 // ==================== библиотека ====================
 const songs = [];
 let cur = null; // песня, которая играет
+const feed = []; // лента: песни SoundCloud, которых нет в библиотеке (пока не нажал сердечко)
 let query = '';
 const decks = [new Audio(), new Audio()];
 let audio = decks[0]; // та, что играет сейчас
@@ -234,7 +235,7 @@ function setSrc(el, blob) {
 // минус (без голоса), если он уже сделан и включён
 const srcOf = (s) => (settings.karaoke && s.inst ? s.inst : s.blob);
 
-const saveSong = (song) => { const { img, imgUrl, imgPromise, bgUrl, vox, ...rec } = song; DB.put(rec); };
+const saveSong = (song) => { if (song.feed) return; const { img, imgUrl, imgPromise, bgUrl, vox, ...rec } = song; DB.put(rec); };
 const lyricsOf = (s) => (s && s.lyrics && s.lyrics.length ? s.lyrics : null);
 
 function toast(text) {
@@ -393,6 +394,119 @@ function netLook(s) {
 }
 $('srcLink').addEventListener('click', () => { if (cur && cur.kind) window.open(netPage(cur)); });
 
+// ==================== лента: песни играют сами, как в Лейне или TikTok ====================
+// источники — открытые страницы SoundCloud (артисты, плейлисты, лайки); играют официальным плеером
+const FEED_BASE = [
+  { id: 'mine', name: 'Артисты из моих песен' },
+  { id: 'ncs', name: 'NCS', url: 'https://soundcloud.com/nocopyrightsounds' },
+  { id: 'mcat', name: 'Monstercat', url: 'https://soundcloud.com/monstercat' },
+  { id: 'chill', name: 'Chillhop', url: 'https://soundcloud.com/chillhopdotcom' },
+];
+const feedLists = new Map();
+let feedBusy = null;
+settings.feedOff = settings.feedOff || []; // выключенные источники
+settings.feedOwn = settings.feedOwn || []; // свои: [{ id, name, url }]
+const seen = new Set(store.get('ln.seen', []));
+const feedSrcs = () => [...FEED_BASE, ...settings.feedOwn].filter((x) => !settings.feedOff.includes(x.id));
+// «артисты из моих песен»: страницы авторов треков SoundCloud, которые уже есть в библиотеке
+const myArtists = () => [...new Set(songs.filter((x) => x.kind === 'sc' && /^https:\/\/soundcloud\.com\/[^/]+\/[^/]+/.test(x.url || '')).map((x) => x.url.split('/').slice(0, 4).join('/')))];
+async function feedFill() {
+  if (feedBusy) return feedBusy;
+  feedBusy = (async () => {
+    const urls = feedSrcs().flatMap((x) => (x.id === 'mine' ? myArtists() : [x.url]));
+    const batch = [];
+    for (let tries = 0; tries < 5 && urls.length; tries++) {
+      const url = urls.splice(Math.floor(Math.random() * urls.length), 1)[0];
+      if (!feedLists.has(url)) feedLists.set(url, (await netList('sc', url)).items || []);
+      const have = new Set([...songs, ...feed].map((x) => x.id).concat(batch.map(netId)));
+      const pool = feedLists.get(url).map((it) => Object.assign({ kind: 'sc' }, it)).filter((it) => !have.has(netId(it)) && !seen.has(netId(it)));
+      pool.sort(() => Math.random() - 0.5).sort((a, b) => !!b.title - !!a.title); // с названием — вперёд
+      batch.push(...pool.slice(0, 4)); // по чуть-чуть из нескольких источников, чтобы лента была разной
+      if (batch.length >= 10) break;
+    }
+    const fresh = await Promise.all(batch.sort(() => Math.random() - 0.5).map(netSong));
+    fresh.forEach((x) => { x.feed = true; });
+    feed.push(...fresh);
+  })().finally(() => { feedBusy = null; if (view === 'feed') renderSongs(); renderPls(); upText(); });
+  return feedBusy;
+}
+async function feedStart() {
+  ctx = 'feed';
+  if (cur && cur.feed && feed.includes(cur)) return;
+  if (!feed.length) {
+    showLoading('Собираю ленту', 'Беру песни из источников…', 0.3);
+    await feedFill();
+    $('loading').hidden = true;
+  }
+  if (!feed.length) { toast('Лента пустая: включи источник или добавь свой — ссылку на артиста или плейлист SoundCloud'); return; }
+  pushHist();
+  load(feed.find((x) => !seen.has(x.id)) || feed[0], true);
+}
+// что услышали — в ленту больше не попадает; когда песни кончаются, подгружаем ещё
+function feedOnLoad(song) {
+  if (!song.feed) return;
+  seen.add(song.id);
+  store.set('ln.seen', [...seen].slice(-400));
+  if (feed.length - feed.indexOf(song) <= 3) feedFill();
+}
+// сердечко: песня из ленты переезжает в «Мои песни»
+function like(s) {
+  if (!s || !s.feed) return;
+  delete s.feed;
+  songs.unshift(s);
+  saveSong(s);
+  renderSongs(); renderPls(); likeBtn();
+  toast(`В Моих песнях: ${s.name}`);
+}
+function likeBtn() {
+  const b = $('like');
+  b.hidden = !(cur && cur.kind);
+  const on = !!cur && !cur.feed;
+  b.ariaPressed = String(on);
+  b.title = on ? 'Уже в Моих песнях' : 'Сохранить в Мои песни';
+}
+$('like').addEventListener('click', () => { if (cur && cur.feed) like(cur); else if (cur) toast('Уже в Моих песнях'); });
+function renderFeedSrc() {
+  const box = $('feedSrc');
+  box.textContent = '';
+  for (const x of [...FEED_BASE, ...settings.feedOwn]) {
+    const b = document.createElement('button');
+    b.className = 'chip' + (settings.feedOff.includes(x.id) ? '' : ' on');
+    b.textContent = x.name;
+    b.title = x.id === 'mine' ? 'Авторы треков SoundCloud, которые ты уже добавил' : x.url;
+    b.addEventListener('click', () => {
+      settings.feedOff = settings.feedOff.includes(x.id) ? settings.feedOff.filter((i) => i !== x.id) : [...settings.feedOff, x.id];
+      saveSettings(); renderFeedSrc();
+    });
+    if (!FEED_BASE.includes(x)) b.addEventListener('contextmenu', (e) => { e.preventDefault(); showMenu([{ text: 'Убрать источник', bad: true, act: () => { settings.feedOwn = settings.feedOwn.filter((o) => o !== x); saveSettings(); renderFeedSrc(); } }], e.clientX, e.clientY); });
+    box.appendChild(b);
+  }
+}
+$('feedAdd').addEventListener('click', async () => {
+  const v = await askName('Источник для ленты', '');
+  const p = v && parseNetUrl(v);
+  if (!v) return;
+  if (!p || p.kind !== 'sc') { toast('Нужна ссылка SoundCloud: артист, плейлист или чьи-то лайки'); return; }
+  const url = p.short ? await window.lnApp.netFinal(p.url) : p.url;
+  const o = await window.lnApp.oembed('sc', url).catch(() => null);
+  let name = (o && (o.author_name && url.split('/').length <= 4 ? o.author_name : o.title)) || url.split('/').slice(3).join('/');
+  if (o && o.author_name && name.endsWith(' by ' + o.author_name)) name = name.slice(0, -(' by ' + o.author_name).length);
+  settings.feedOwn.push({ id: 'o' + Date.now().toString(36), name: name.slice(0, 30), url });
+  saveSettings(); renderFeedSrc();
+  toast('Источник добавлен');
+});
+// новая лента: всё, что ещё не играло, выкидываем и набираем заново
+$('feedNew').addEventListener('click', async () => {
+  const keep = cur && cur.feed ? feed.indexOf(cur) + 1 : 0;
+  feed.splice(keep);
+  feedLists.clear();
+  renderSongs();
+  showLoading('Собираю ленту', 'Беру песни из источников…', 0.3);
+  await feedFill();
+  $('loading').hidden = true;
+  if (feed[keep]) { ctx = 'feed'; pushHist(); load(feed[keep], true); } else toast('Из этих источников песен не нашлось');
+});
+
 function renderSongs() {
   const box = $('songs');
   const keep = box.scrollTop;
@@ -415,6 +529,7 @@ function renderSongs() {
     del.addEventListener('click', async (e) => {
       e.stopPropagation();
       if (!del.classList.contains('sure')) { del.classList.add('sure'); del.textContent = 'Убрать?'; setTimeout(() => { del.classList.remove('sure'); del.textContent = '×'; }, 2500); return; }
+      if (s.feed) { if (s === cur) step(1); feed.splice(feed.indexOf(s), 1); renderSongs(); return; } // из ленты просто убираем
       await DB.del(s.id);
       songs.splice(songs.indexOf(s), 1);
       playlists.forEach((p) => { p.ids = p.ids.filter((id) => id !== s.id); });
@@ -438,26 +553,29 @@ let playlists = store.get('ln.playlists', []); // [{ id, name, ids }]
 let view = 'all', ctx = 'all'; // что открыто в списке и откуда играет очередь
 const savePls = () => store.set('ln.playlists', playlists);
 const plById = (id) => playlists.find((p) => p.id === id);
-const listOf = (v) => { const p = plById(v); return p ? p.ids.map((id) => songs.find((s) => s.id === id)).filter(Boolean) : songs; };
+const listOf = (v) => { if (v === 'feed') return feed; const p = plById(v); return p ? p.ids.map((id) => songs.find((s) => s.id === id)).filter(Boolean) : songs; };
 const queue = () => listOf(ctx);
 const plural = (n) => `${n} ${n % 10 === 1 && n % 100 !== 11 ? 'песня' : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? 'песни' : 'песен'}`;
 
 function renderPls() {
   const box = $('pls');
   box.textContent = '';
-  [{ id: 'all', name: 'Все песни' }, ...playlists].forEach((p) => {
+  $('feedBox').hidden = view !== 'feed';
+  if (view === 'feed') renderFeedSrc();
+  [{ id: 'feed', name: 'Лента' }, { id: 'all', name: 'Все песни' }, ...playlists].forEach((p) => {
     const el = document.createElement('div'), list = listOf(p.id);
     el.className = 'pl' + (view === p.id ? ' on' : '');
     el.tabIndex = 0;
     const mos = document.createElement('span');
-    mos.className = 'mos' + (p.id === 'all' ? ' all' : '');
-    if (p.id === 'all') mos.innerHTML = '<svg viewBox="0 0 24 24"><path d="M9 18V6l11-2v12M9 18a3 3 0 1 1-3-3 3 3 0 0 1 3 3zm11-2a3 3 0 1 1-3-3 3 3 0 0 1 3 3z"/></svg>';
+    mos.className = 'mos' + (p.id === 'all' || p.id === 'feed' ? ' all' : '');
+    if (p.id === 'feed') mos.innerHTML = '<svg viewBox="0 0 24 24"><path d="M4 7h16v2H4zm0 4h10v2H4zm0 4h16v2H4zM17 10l5 3-5 3z"/></svg>';
+    else if (p.id === 'all') mos.innerHTML = '<svg viewBox="0 0 24 24"><path d="M9 18V6l11-2v12M9 18a3 3 0 1 1-3-3 3 3 0 0 1 3 3zm11-2a3 3 0 1 1-3-3 3 3 0 0 1 3 3z"/></svg>';
     else list.slice(0, 4).forEach((s) => { const i = document.createElement('img'); i.alt = ''; if (s.imgUrl) i.src = s.imgUrl; else songImage(s).then(() => { i.src = s.imgUrl; }); mos.appendChild(i); });
-    if (list.length && list.length < 4 && p.id !== 'all') mos.classList.add('one');
+    if (list.length && list.length < 4 && p.id !== 'all' && p.id !== 'feed') mos.classList.add('one');
     const b = document.createElement('b'), sm = document.createElement('small');
-    b.textContent = p.name; sm.textContent = plural(list.length);
+    b.textContent = p.name; sm.textContent = p.id === 'feed' ? 'Песни играют сами, листай' : plural(list.length);
     el.append(mos, b, sm);
-    const open = () => { view = p.id; renderPls(); renderSongs(); };
+    const open = () => { view = p.id; renderPls(); renderSongs(); if (p.id === 'feed') feedStart(); };
     el.addEventListener('click', open);
     el.addEventListener('keydown', (e) => { if (e.key === 'Enter') open(); });
     if (p.id !== 'all') {
@@ -471,6 +589,8 @@ function renderPls() {
   });
 }
 function addToPl(p, id) {
+  const f = feed.find((x) => x.id === id);
+  if (f && f.feed) like(f); // песню из ленты сначала сохраняем к себе
   const s = songs.find((x) => x.id === id);
   if (!s) return;
   if (p.ids.includes(id)) { toast('Эта песня уже в плейлисте'); return; }
@@ -522,6 +642,7 @@ function hideMenu() { $('menu').hidden = true; }
 addEventListener('pointerdown', (e) => { if (!$('menu').hidden && !$('menu').contains(e.target)) hideMenu(); });
 addEventListener('blur', hideMenu);
 function songMenu(s, x, y) {
+  if (s.feed) { showMenu([{ text: 'Сохранить в Мои песни', act: () => like(s) }], x, y); return; }
   const items = [{ text: 'Играть', act: () => { ctx = view; pushHist(); load(s, true); } }, { label: 'Добавить в плейлист' }];
   playlists.forEach((p) => items.push({ text: p.name, act: () => addToPl(p, s.id) }));
   items.push({ text: '+ Новый плейлист', act: () => newPl(s) });
@@ -808,6 +929,7 @@ async function load(song, autoplay) {
     audio.preservesPitch = false; // sped up и slowed как в тиктоке: вместе с темпом меняется и тон
   }
   showSong(); upText(); renderSongs();
+  feedOnLoad(song); likeBtn();
   if (slideDir) { const c = document.querySelector('.cover'); c.classList.remove('inNext', 'inPrev'); void c.offsetWidth; c.classList.add(slideDir > 0 ? 'inNext' : 'inPrev'); slideDir = 0; }
   waveDirty = true;
   if (!song.wave && song.blob) waveOf(song);
@@ -831,8 +953,8 @@ function step(d) {
   if (sync || !q.length) return;
   if (d < 0 && audio.currentTime > 3) { audio.currentTime = 0; return; } // как в любом плеере: сначала в начало песни
   let nx = null;
-  if (d < 0) while (hist.length && !nx) { const h = hist.pop(); if (songs.includes(h) && h !== cur) nx = h; }
-  if (!nx && d > 0 && settings.shuffle && q.length > 1) do nx = q[Math.floor(Math.random() * q.length)]; while (nx === cur);
+  if (d < 0) while (hist.length && !nx) { const h = hist.pop(); if ((songs.includes(h) || feed.includes(h)) && h !== cur) nx = h; }
+  if (!nx && d > 0 && settings.shuffle && ctx !== 'feed' && q.length > 1) do nx = q[Math.floor(Math.random() * q.length)]; while (nx === cur);
   if (!nx) { const i = cur ? q.indexOf(cur) : -1; nx = q[(i + d + q.length) % q.length]; }
   if (d > 0) pushHist();
   slideDir = d;
