@@ -26,4 +26,5 @@ contextBridge.exposeInMainWorld('lnApp', {
   netFinal: (url) => ipcRenderer.invoke('net:final', url),
   browse: (site) => ipcRenderer.send('browse:open', site),
   onNetAdd: (fn) => ipcRenderer.on('net:add', (_e, url) => fn(url)),
+  onBrowseClosed: (fn) => ipcRenderer.on('browse:closed', () => fn()),
 });

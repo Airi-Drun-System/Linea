@@ -7,6 +7,8 @@ const os = require('os');
 // музыка играет и в свёрнутом окне без задержек
 app.commandLine.appendSwitch('disable-renderer-backgrounding');
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
+// YouTube и Google встречают «Electron» в подписи браузера проверкой «вы не бот» и не пускают войти — представляемся обычным Chrome
+app.userAgentFallback = app.userAgentFallback.replace(/ (Electron|linea)\/\S+/gi, '');
 
 let win = null;
 // журнал для разбора проблем: рядом с портативным .exe (или в папке данных программы)
@@ -34,7 +36,12 @@ function createWindow() {
     if (input.type === 'keyDown' && input.key === 'F11') { win.setFullScreen(!win.isFullScreen()); e.preventDefault(); }
   });
   // ссылки из плеера (логотип YouTube, «Открыть на SoundCloud») — в обычном браузере
-  win.webContents.setWindowOpenHandler(({ url }) => { if (/^https:\/\/([a-z0-9-]+\.)?(youtube\.com|youtu\.be|soundcloud\.com)\//.test(url)) shell.openExternal(url); return { action: 'deny' }; });
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    // «Войти» из плеера YouTube — в окне самой Linea: вход должен остаться в её куках, иначе плеер так и будет просить войти
+    if (/^https:\/\/accounts\.google\.com\/|^https:\/\/(www\.)?youtube\.com\/(signin|ServiceLogin)/.test(url)) openBrowse(url);
+    else if (/^https:\/\/([a-z0-9-]+\.)?(youtube\.com|youtu\.be|soundcloud\.com)\//.test(url)) shell.openExternal(url);
+    return { action: 'deny' };
+  });
   win.webContents.on('will-navigate', (e) => e.preventDefault());
   win.loadFile(path.join(__dirname, 'src', 'index.html'));
   // портативная Linea запускается из временной папки, которая удаляется после выхода; чтобы значок,
@@ -297,21 +304,21 @@ ipcMain.handle('net:final', async (_e, url) => {
 // поиск прямо в Linea: сайт SoundCloud или YouTube в своём окне и кнопка «В Linea»
 const SITES = { sc: 'https://soundcloud.com/discover', yt: 'https://www.youtube.com/' };
 let browse = null;
-ipcMain.on('browse:open', (_e, site) => {
-  if (!SITES[site]) return;
+ipcMain.on('browse:open', (_e, site) => { if (SITES[site]) openBrowse(SITES[site]); });
+// окно сайтов — в той же сессии, что и плеер: вход в YouTube или SoundCloud здесь работает и для песен в Linea
+function openBrowse(url) {
   if (!browse) {
     browse = new BrowserWindow({
       width: 1100, height: 780, title: 'Найти песню', icon: iconPath(prefs.icon), autoHideMenuBar: true, backgroundColor: '#09090D',
-      webPreferences: { preload: path.join(__dirname, 'preload-browse.js'), contextIsolation: true, nodeIntegration: false, sandbox: true, partition: 'persist:browse' },
+      webPreferences: { preload: path.join(__dirname, 'preload-browse.js'), contextIsolation: true, nodeIntegration: false, sandbox: true },
     });
     // сайты не пускают «Electron», представляемся обычным Chrome
-    browse.webContents.setUserAgent(browse.webContents.getUserAgent().replace(/ (Electron|linea)\/\S+/gi, ''));
     browse.webContents.setWindowOpenHandler(({ url }) => { if (/^https:\/\//.test(url)) browse.loadURL(url); return { action: 'deny' }; });
-    browse.on('closed', () => { browse = null; });
+    browse.on('closed', () => { browse = null; if (win) win.webContents.send('browse:closed'); });
   }
-  browse.loadURL(SITES[site]);
+  browse.loadURL(url);
   browse.show(); browse.focus();
-});
+}
 ipcMain.on('browse:add', (e, url) => {
   if (!browse || e.sender !== browse.webContents || !win) return;
   win.webContents.send('net:add', String(url).slice(0, 2000));

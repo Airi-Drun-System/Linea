@@ -380,6 +380,13 @@ $('urlIn').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('urlGo'
 $('urlCancel').addEventListener('click', () => { $('urlDlg').hidden = true; });
 document.querySelectorAll('[data-site]').forEach((b) => b.addEventListener('click', () => { $('urlDlg').hidden = true; window.lnApp && window.lnApp.browse(b.dataset.site); }));
 if (window.lnApp && window.lnApp.onNetAdd) window.lnApp.onNetAdd((u) => addUrl(u));
+// закрыли окно сайта (могли войти в YouTube) — перезапускаем мостик, чтобы плеер подхватил вход
+if (window.lnApp && window.lnApp.onBrowseClosed) window.lnApp.onBrowseClosed(() => {
+  if (!bridgeEl || !bridgeUp) return;
+  bridgeUp = false;
+  bridgeEl.src = bridgeEl.src;
+  if (cur && cur.kind) net.open(cur, false);
+});
 // Ctrl+V со ссылкой в любом месте плеера — сразу добавить
 addEventListener('paste', (e) => {
   const t = e.target;
