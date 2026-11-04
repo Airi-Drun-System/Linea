@@ -5,7 +5,8 @@
   const C = window.Capacitor;
   if (window.lnApp || !C || !C.isNativePlatform || !C.isNativePlatform()) return;
   document.documentElement.classList.add('mobile');
-  const L = C.registerPlugin('Linea');
+  // без плагина (старый мост) всё остальное — поиск, обновления, настройки — всё равно работает
+  const L = C.registerPlugin ? C.registerPlugin('Linea') : { addListener: () => {}, playing: async () => {}, minimize: async () => {} };
   const BUILD = window.LN_BUILD || 0; // номер сборки, его вписывает сборка APK (build.js)
   const REL = 'https://github.com/Airi-Drun-System/Linea/releases/download/android/';
   const getJson = async (url) => {
