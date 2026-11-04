@@ -229,7 +229,7 @@ app.on('second-instance', () => {
   win.webContents.send('keys:step', 'already');
 });
 if (process.platform === 'win32') app.setAppUserModelId('com.vegasdev.linea');
-app.whenReady().then(() => { logLine('Linea запущен', app.getVersion(), process.platform, os.release()); createWindow(); makeTray(); });
+app.whenReady().then(() => { logLine('Linea запущен', app.getVersion(), process.platform, os.release()); createWindow(); makeTray(); setupUpdates(); });
 // ==================== значок в трее ====================
 let tray = null, quitting = false;
 const prefs = { icon: 'grey', tray: true, trayTold: false };
@@ -265,6 +265,24 @@ ipcMain.on('app:prefs', (_e, q) => {
     if (tray && !img.isEmpty()) tray.setImage(img.resize({ width: 32, height: 32 }));
   }
 });
+// ==================== обновления по воздуху ====================
+// установленная Linea сама проверяет релизы на GitHub, тихо качает новую версию и предлагает перезапуститься
+let updReady = null;
+function setupUpdates() {
+  if (!app.isPackaged || process.env.PORTABLE_EXECUTABLE_FILE) return; // портативную обновлять некуда
+  let au;
+  try { ({ autoUpdater: au } = require('electron-updater')); } catch (e) { logLine('обновления:', String(e)); return; }
+  au.autoDownload = true;
+  au.autoInstallOnAppQuit = true; // если не нажал «Обновить», поставится при выходе
+  au.on('update-downloaded', (i) => { updReady = i.version; logLine('обновление скачано', i.version); if (win) win.webContents.send('upd:ready', i.version); });
+  au.on('error', (e) => logLine('обновления: ошибка', String((e && e.message) || e)));
+  const check = () => au.checkForUpdates().catch((e) => logLine('обновления: не проверилось', String(e)));
+  setTimeout(check, 5000);
+  setInterval(check, 2 * 60 * 60 * 1000);
+  ipcMain.handle('upd:check', () => check().then(() => true));
+  ipcMain.on('upd:install', () => { quitting = true; au.quitAndInstall(true, true); });
+}
+ipcMain.handle('upd:state', () => ({ version: app.getVersion(), ready: updReady, can: app.isPackaged && !process.env.PORTABLE_EXECUTABLE_FILE }));
 app.on('before-quit', () => { quitting = true; });
 app.on('will-quit', () => globalShortcut.unregisterAll());
 app.on('window-all-closed', () => app.quit());

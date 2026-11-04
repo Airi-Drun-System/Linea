@@ -433,6 +433,7 @@ function renderBgDlg() {
   $('accCol').value = settings.accent || (cur && cur.pal ? cur.pal[0] : '#d4d4da');
   $('lyrSize').value = settings.lyrScale || 1; $('lyrSizeV').textContent = Math.round((settings.lyrScale || 1) * 100) + '%';
   $('trayOn').checked = settings.tray !== false;
+  updRefresh();
   document.querySelectorAll('#themeSeg button').forEach((b) => b.classList.toggle('on', b.dataset.th === (settings.theme || 'dark')));
   $('sideA').value = settings.sideA || 0.55; $('sideAV').textContent = Math.round((1 - (settings.sideA || 0.55)) * 100) + '%';
   document.querySelectorAll('#txMode button').forEach((b) => b.classList.toggle('on', b.dataset.t === (settings.tx || 'plain')));
@@ -1196,6 +1197,21 @@ sysLight.addEventListener('change', applyTheme);
 document.querySelectorAll('#themeSeg button').forEach((b) => b.addEventListener('click', () => { settings.theme = b.dataset.th; saveSettings(); applyTheme(); renderBgDlg(); }));
 $('sideA').addEventListener('input', () => { settings.sideA = Number($('sideA').value); saveSettings(); $('sideAV').textContent = Math.round((1 - settings.sideA) * 100) + '%'; applyTheme(); });
 applyTheme();
+
+// ==================== обновления по воздуху ====================
+async function updRefresh() {
+  if (!window.lnApp || !window.lnApp.updState) { $('verTxt').textContent = 'Версия: браузерная'; $('updChk').hidden = true; return; }
+  const st = await window.lnApp.updState();
+  $('verTxt').textContent = `Версия ${st.version}` + (st.ready ? ` · скачана ${st.ready}` : '');
+  $('updChk').hidden = !st.can;
+  if (st.ready) updShow(st.ready);
+}
+function updShow(v) { $('updTxt').textContent = `Вышло обновление Linea ${v}`; $('updBar').hidden = false; }
+if (window.lnApp && window.lnApp.onUpd) window.lnApp.onUpd(updShow);
+$('updGo').addEventListener('click', () => window.lnApp && window.lnApp.updInstall && window.lnApp.updInstall());
+$('updLater').addEventListener('click', () => { $('updBar').hidden = true; toast('Обновление поставится, когда выйдешь из Linea'); });
+$('updChk').addEventListener('click', async () => { toast('Проверяю обновления…'); await window.lnApp.updCheck().catch(() => {}); setTimeout(updRefresh, 4000); });
+updRefresh();
 // ==================== кадр: перемотка, бас, строка ====================
 function frame(now) {
   requestAnimationFrame(frame);

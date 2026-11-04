@@ -66,9 +66,18 @@
       "node_modules/onnxruntime-node/**",
       "node_modules/onnxruntime-common/**"
     ],
-    "npmRebuild": false
+    "npmRebuild": false,
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Airi-Drun-System",
+        "repo": "Linea",
+        "releaseType": "release"
+      }
+    ]
   },
   "dependencies": {
+    "electron-updater": "6.3.9",
     "onnxruntime-node": "1.22.0"
   }
 }

@@ -291,6 +291,10 @@ body.liquid .over{backdrop-filter:blur(6px);background:rgba(var(--shade-rgb),.35
 .txDemo{font:26px var(--display);margin-left:8px}
 :root.txg .meta h1,:root.txg .brandBtn span,:root.txg .txDemo{background:linear-gradient(90deg,var(--t1),var(--t2),var(--t1));background-size:200% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:shim 4s linear infinite;text-shadow:none;filter:drop-shadow(0 2px 0 rgba(0,0,0,.45)) drop-shadow(0 0 12px color-mix(in srgb,var(--t1) 40%,transparent))}
 
+/* плашка «вышло обновление» — снизу справа, не мешает */
+.updBar{position:fixed;right:20px;bottom:20px;z-index:30;display:flex;align-items:center;gap:10px;padding:10px 10px 10px 18px;border-radius:16px;background:rgba(var(--bg-rgb),.92);border:1px solid var(--line);box-shadow:0 18px 50px rgba(0,0,0,.35);font-weight:700;animation:pop .35s var(--spring) both}
+.updBar #updGo{padding:9px 16px;border-radius:99px;background:var(--a1);color:var(--on-a1);font-weight:800}
+
 /* окна */
 .over{position:fixed;inset:0;display:grid;place-items:center;padding:16px;background:rgba(var(--shade-rgb),.6);backdrop-filter:blur(14px);animation:fade .25s both;z-index:20}
 .card{background:rgba(var(--bg-rgb),.9);border:1px solid var(--line);border-radius:28px;padding:28px;width:min(560px,100%);display:flex;flex-direction:column;gap:14px;animation:pop .45s var(--spring) both;box-shadow:0 40px 100px rgba(0,0,0,.5)}
@@ -384,6 +388,7 @@ body.liquid .over{backdrop-filter:blur(6px);background:rgba(var(--shade-rgb),.35
 </div>
 
 <div class="menu" id="menu" role="menu" hidden></div>
+<div class="updBar" id="updBar" hidden><span id="updTxt">Вышло обновление Linea</span><button id="updGo">Обновить</button><button class="x" id="updLater" aria-label="Позже">×</button></div>
 
 <div class="over" id="sepDlg" hidden>
   <div class="card">
@@ -434,6 +439,8 @@ body.liquid .over{backdrop-filter:blur(6px);background:rgba(var(--shade-rgb),.35
     <label class="chk pcOnly"><input type="checkbox" id="keysG"><span></span>Клавиши ← → (песни), PgDn (играть) и PgUp (стоп) работают везде, даже в других программах и играх</label>
     <div class="ovRow pcOnly"><label class="chk"><input type="checkbox" id="ovOn"><span></span>Слова поверх игр</label><button class="chipB" id="ovMove" hidden>Подвинуть</button></div>
     <label class="field">Стекло<select id="glassSel"><option value="liquid">Жидкое: преломляет фон, как линза</option><option value="plain">Обычное: размытое, легче для слабых компьютеров</option></select></label>
+    <h4>Обновления</h4>
+    <div class="ovRow"><span id="verTxt">Версия</span><button class="chipB" id="updChk">Проверить</button></div>
     <p class="keys"><kbd>←</kbd> <kbd>→</kbd> песни · <kbd>Пробел</kbd> пауза · <kbd>↑</kbd> <kbd>↓</kbd> громкость · <kbd>PgDn</kbd> играть · <kbd>PgUp</kbd> стоп · <kbd>Esc</kbd> закрыть</p>
     <div class="acts"><button class="main" id="bgClose">Готово</button></div>
   </div>
