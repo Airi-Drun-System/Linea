@@ -433,6 +433,10 @@ function renderBgDlg() {
   $('accCol').value = settings.accent || (cur && cur.pal ? cur.pal[0] : '#d4d4da');
   $('lyrSize').value = settings.lyrScale || 1; $('lyrSizeV').textContent = Math.round((settings.lyrScale || 1) * 100) + '%';
   $('trayOn').checked = settings.tray !== false;
+  document.querySelectorAll('#txMode button').forEach((b) => b.classList.toggle('on', b.dataset.t === (settings.tx || 'plain')));
+  $('txCols').hidden = (settings.tx || 'plain') === 'plain';
+  $('tx1').hidden = $('tx2').hidden = settings.tx !== 'own';
+  $('tx1').value = settings.tx1 || '#c6ff4a'; $('tx2').value = settings.tx2 || '#1f7a18';
   $('vidBg').checked = settings.videoBg !== false;
   $('keysG').checked = settings.globalKeys !== false;
   $('ovOn').checked = !!settings.overlay;
@@ -636,6 +640,7 @@ async function load(song, autoplay) {
   waveDirty = true;
   $('coverImg').src = song.imgUrl;
   applyBg();
+  applyTx();
   if (window.MediaMetadata) navigator.mediaSession.metadata = new MediaMetadata({ title: song.name, artist: song.artist || '', artwork: [{ src: song.imgUrl }] });
 }
 // история прослушанного: «назад» возвращает к тому, что реально играло, и в перемешке тоже
@@ -951,7 +956,7 @@ setInterval(() => {
     const lt = audio.currentTime * 1000 - (cur.lyrOff || 0), i = lineAt(L, lt);
     if (i >= 0) {
       const l = L[i], nx = L.slice(i + 1).find((x) => x.text);
-      st = { i, text: l.text, next: nx ? nx.text : '', color: (cur.pal || [])[0] };
+      st = { i, text: l.text, next: nx ? nx.text : '', color: (cur.pal || [])[0], grad: (settings.tx || 'plain') !== 'plain' ? txColors() : null };
       if (l.words) { st.words = l.words.map((w) => w.text); st.sung = l.words.filter((w) => w.t <= lt).length; }
       else { const end = i + 1 < L.length ? L[i + 1].t : l.t + 4000; st.p = Math.min(1, (lt - l.t) / Math.max(400, Math.min(end - l.t, 7000) * 0.85)); }
     }
@@ -1121,6 +1126,21 @@ $('accCol').addEventListener('input', () => { settings.accent = $('accCol').valu
 $('lyrSize').addEventListener('input', () => { settings.lyrScale = Number($('lyrSize').value); saveSettings(); $('lyrSizeV').textContent = Math.round(settings.lyrScale * 100) + '%'; applyLook(); lineIdx = -2; });
 $('trayOn').addEventListener('change', () => { settings.tray = $('trayOn').checked; saveSettings(); applyLook(); });
 applyLook();
+
+// ==================== стиль текста: перелив градиентом ====================
+function txColors() {
+  if (settings.tx === 'own') return [settings.tx1 || '#c6ff4a', settings.tx2 || '#1f7a18'];
+  const p = (cur && cur.pal) || ['#d4d4da', '#8b8b95'];
+  return [p[0], p[1]];
+}
+function applyTx() {
+  const on = (settings.tx || 'plain') !== 'plain', r = document.documentElement;
+  r.classList.toggle('txg', on);
+  if (on) { const [a, b] = txColors(); r.style.setProperty('--t1', a); r.style.setProperty('--t2', b); }
+}
+document.querySelectorAll('#txMode button').forEach((b) => b.addEventListener('click', () => { settings.tx = b.dataset.t; saveSettings(); applyTx(); renderBgDlg(); }));
+for (const id of ['tx1', 'tx2']) $(id).addEventListener('input', () => { settings[id] = $(id).value; saveSettings(); applyTx(); });
+applyTx();
 // ==================== кадр: перемотка, бас, строка ====================
 function frame(now) {
   requestAnimationFrame(frame);

@@ -4,6 +4,8 @@ let lastKey = '';
 // плеер присылает: текущую строку (со словами или без), сколько слов спето, заливку и следующую строку
 window.ov.onState((st) => {
   if (st.color) document.body.style.setProperty('--a1', st.color);
+  document.body.classList.toggle('grad', !!st.grad);
+  if (st.grad) { document.body.style.setProperty('--t1', st.grad[0]); document.body.style.setProperty('--t2', st.grad[1]); }
   $('box').classList.toggle('hide', !st.text && !document.body.classList.contains('move'));
   const key = st.i + '|' + st.text;
   const line = $('line');

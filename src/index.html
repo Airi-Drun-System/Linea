@@ -280,6 +280,12 @@ body.liquid .over{backdrop-filter:blur(6px);background:rgba(6,6,9,.35)}
 .icoB:hover{background:rgba(255,255,255,.1)}
 .icoB.on{border-color:var(--a1)}
 
+/* стиль текста «перелив»: название, имя песни и спетые слова — градиентом, который медленно бежит */
+@keyframes shim{to{background-position:-200% 0}}
+.txDemo{font:26px var(--display);margin-left:8px}
+:root.txg .meta h1,:root.txg .brandBtn span,:root.txg .txDemo,:root.txg .ln.on .w.sung,:root.txg .ln.on:not(.wl){background:linear-gradient(90deg,var(--t1),var(--t2),var(--t1));background-size:200% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:shim 4s linear infinite;text-shadow:none;filter:drop-shadow(0 2px 0 rgba(0,0,0,.45)) drop-shadow(0 0 12px color-mix(in srgb,var(--t1) 40%,transparent))}
+:root.txg .ln.on:not(.wl){background-image:linear-gradient(90deg,var(--t1),var(--t2) calc(var(--p,0)*100%),rgba(255,255,255,.42) calc(var(--p,0)*100% + 8%));background-size:100% 100%;animation:none}
+
 /* окна */
 .over{position:fixed;inset:0;display:grid;place-items:center;padding:16px;background:rgba(6,6,9,.6);backdrop-filter:blur(14px);animation:fade .25s both;z-index:5}
 .card{background:rgba(22,22,30,.86);border:1px solid var(--line);border-radius:28px;padding:28px;width:min(560px,100%);display:flex;flex-direction:column;gap:14px;animation:pop .45s var(--spring) both;box-shadow:0 40px 100px rgba(0,0,0,.5)}
@@ -409,6 +415,10 @@ body.liquid .over{backdrop-filter:blur(6px);background:rgba(6,6,9,.35)}
     <h4>Вид</h4>
     <div class="field pcOnly">Иконка Linea<div class="icos" id="icos"><button class="icoB" data-ico="grey" title="Серый"><img src="icons/grey.png" alt="Серый"></button><button class="icoB" data-ico="white" title="Белый"><img src="icons/white.png" alt="Белый"></button><button class="icoB" data-ico="ice" title="Лёд"><img src="icons/ice.png" alt="Лёд"></button><button class="icoB" data-ico="lime" title="Лайм"><img src="icons/lime.png" alt="Лайм"></button><button class="icoB" data-ico="sunset" title="Закат"><img src="icons/sunset.png" alt="Закат"></button><button class="icoB" data-ico="red" title="Красный"><img src="icons/red.png" alt="Красный"></button><button class="icoB" data-ico="gold" title="Золото"><img src="icons/gold.png" alt="Золото"></button></div></div>
     <div class="ovRow"><span>Цвет кнопок и волны</span><span class="cols"><button class="chipB" id="accAuto">Из обложки</button><input type="color" id="accCol" aria-label="Свой цвет"></span></div>
+    <div class="field">Стиль текста
+      <div class="seg" id="txMode"><button data-t="plain">Обычный</button><button data-t="cover">Перелив из обложки</button><button data-t="own">Свой перелив</button></div>
+      <span class="cols" id="txCols"><input type="color" id="tx1" aria-label="Цвет 1"><input type="color" id="tx2" aria-label="Цвет 2"><b class="txDemo" id="txDemo">Linea</b></span>
+    </div>
     <label class="rng"><span>Размер слов <b id="lyrSizeV"></b></span><input type="range" id="lyrSize" min="0.7" max="1.5" step="0.05"></label>
     <label class="chk pcOnly"><input type="checkbox" id="trayOn"><span></span>Крестик прячет Linea в трей, музыка играет дальше</label>
     <h4>Звук и клавиши</h4>
