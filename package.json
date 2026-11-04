@@ -23,6 +23,7 @@
       "main.js",
       "preload.js",
       "preload-overlay.js",
+      "preload-browse.js",
       "src/**",
       "sep/**",
       "package.json",

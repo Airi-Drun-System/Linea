@@ -160,6 +160,70 @@ const decks = [new Audio(), new Audio()];
 let audio = decks[0]; // та, что играет сейчас
 const deckUrl = new Map(), deckGain = new Map();
 decks.forEach((d) => { d.volume = settings.volume; d.preservesPitch = false; });
+// песни с SoundCloud и YouTube играют их официальные плееры в «мостике» (iframe с localhost, см. main.js).
+// Снаружи мостик выглядит как ещё одна дека <audio>: те же currentTime, paused, play() и события,
+// поэтому слова, полоса, оверлей и клавиши работают с ним без переделок
+let bridgeEl = null, bridgeOrigin = '', bridgeUp = false, bridgeQ = [], openN = 0, listReq = 0;
+const listWait = new Map();
+function bridge(m) {
+  if (bridgeUp) { bridgeEl.contentWindow.postMessage(m, bridgeOrigin); return; }
+  bridgeQ.push(m);
+  if (bridgeEl || !window.lnApp || !window.lnApp.netPort) return;
+  bridgeEl = document.createElement('iframe');
+  bridgeEl.className = 'bridge';
+  bridgeEl.allow = 'autoplay; encrypted-media';
+  bridgeEl.title = 'Плеер';
+  document.querySelector('.cover').appendChild(bridgeEl);
+  window.lnApp.netPort().then((port) => { bridgeOrigin = `http://127.0.0.1:${port}`; bridgeEl.src = `${bridgeOrigin}/player.html`; })
+    .catch(() => toast('Не запустился плеер для SoundCloud и YouTube'));
+}
+class NetDeck extends EventTarget {
+  constructor() { super(); this.t = 0; this.d = 0; this.v = 1; this.paused = true; this.playbackRate = this.defaultPlaybackRate = 1; this.preservesPitch = false; this.err = ''; }
+  get currentTime() { return this.t; }
+  set currentTime(t) { this.t = Math.max(0, t); bridge({ cmd: 'seek', t: this.t }); this.fire('seeked'); }
+  get duration() { return this.d; }
+  get volume() { return this.v; }
+  set volume(v) { this.v = v; bridge({ cmd: 'vol', v }); }
+  open(song, play) {
+    this.t = 0; this.d = (song.duration || 0) / 1000; this.paused = !play;
+    bridge({ cmd: 'vol', v: this.v });
+    bridge({ cmd: 'open', n: ++openN, kind: song.kind, src: song.kind === 'yt' ? song.vid : song.url, play: !!play, t: 0 });
+  }
+  play() { this.paused = false; bridge({ cmd: 'play' }); return Promise.resolve(); }
+  pause() { if (!this.paused) { this.paused = true; this.fire('pause'); } bridge({ cmd: 'pause' }); }
+  removeAttribute() { this.paused = true; bridge({ cmd: 'stop' }); }
+  fire(n) { this.dispatchEvent(new Event(n)); }
+}
+const net = new NetDeck();
+net.v = settings.volume;
+addEventListener('message', (e) => {
+  if (!bridgeEl || e.source !== bridgeEl.contentWindow || !e.data || !e.data.linea) return;
+  const m = e.data;
+  if (m.ev === 'hello') { bridgeUp = true; const q = bridgeQ; bridgeQ = []; q.forEach(bridge); return; }
+  if (m.ev === 'list') { const w = listWait.get(m.req); if (w) { listWait.delete(m.req); w(m); } return; }
+  if (m.n !== openN) return; // событие от прошлой песни
+  if (m.ev === 'time') {
+    net.t = m.t; if (m.d) net.d = m.d;
+    net.fire('timeupdate');
+  } else if (m.ev === 'play') { if (net.paused) { net.paused = false; } net.fire('play'); }
+  else if (m.ev === 'pause') { if (!net.paused) { net.paused = true; net.fire('pause'); } }
+  else if (m.ev === 'ended') { net.paused = true; net.fire('ended'); }
+  else if (m.ev === 'error') { net.err = m.msg; net.paused = true; net.fire('error'); net.fire('pause'); }
+  else if (m.ev === 'meta') netMeta(m);
+});
+// узнали длину (и название, если его не было) только когда трек заиграл
+function netMeta(m) {
+  const s = cur;
+  if (!s || !s.kind) return;
+  let ch = false;
+  if (m.d && Math.abs(s.duration - m.d * 1000) > 1500) { s.duration = Math.round(m.d * 1000); ch = true; $('dur').textContent = fmtDur(s.duration); }
+  if (s.noName && m.title) { Object.assign(s, splitTitle(m.title, m.artist)); delete s.noName; ch = true; showSong(); }
+  if (ch) { saveSong(s); renderSongs(); }
+  // у треков из плейлиста слова ищем, когда они впервые заиграли, а не все сразу
+  if (!lyricsOf(s) && (ch || !s.lyrTried)) { s.lyrTried = true; findLyrics(s, true); }
+}
+// список треков плейлиста через невидимый плеер в мостике
+const netList = (kind, src) => new Promise((res) => { const req = ++listReq; listWait.set(req, res); bridge({ cmd: 'list', kind, src, req }); });
 function setSrc(el, blob) {
   const old = deckUrl.get(el);
   if (old) URL.revokeObjectURL(old);
@@ -225,6 +289,110 @@ for (const ev of ['dragleave', 'drop']) addEventListener(ev, (e) => { e.preventD
 addEventListener('drop', (e) => e.dataTransfer.types.includes('Files') && addFiles([...(e.dataTransfer?.files || [])].filter((x) => /^audio\//.test(x.type) || /^video\//.test(x.type) || /\.(mp3|ogg|wav|flac|m4a|opus|aac|mp4|webm|mov|mkv)$/i.test(x.name))));
 $('find').addEventListener('input', () => { query = $('find').value.trim().toLowerCase(); renderSongs(); });
 
+// ==================== песни по ссылке: SoundCloud, YouTube и прямые ссылки на файл ====================
+const netId = (it) => (it.kind === 'yt' ? 'yt' + it.vid : 'sc' + hashStr(it.url).toString(36));
+const netPage = (s) => (s.kind === 'yt' ? `https://www.youtube.com/watch?v=${s.vid}` : s.url);
+async function netCover(it, thumb) {
+  const urls = it.kind === 'yt' ? [`https://i.ytimg.com/vi/${it.vid}/maxresdefault.jpg`, `https://i.ytimg.com/vi/${it.vid}/mqdefault.jpg`] : [it.art, thumb];
+  for (const u of urls.filter(Boolean)) {
+    const b = await window.lnApp.netImg(u).catch(() => null);
+    if (b && b.byteLength > 2000) return new Blob([b], { type: 'image/jpeg' });
+  }
+  return null;
+}
+async function netSong(it) {
+  let title = it.title, author = it.artist, thumb = '';
+  if (!title) {
+    const o = await window.lnApp.oembed(it.kind, netPage(it)).catch(() => null);
+    if (o) { title = o.title; author = o.author_name; thumb = o.thumbnail_url; }
+  }
+  const song = Object.assign({ id: netId(it), kind: it.kind, duration: it.dur || 0, added: Date.now(), cover: await netCover(it, thumb) }, splitTitle(title, author));
+  if (it.kind === 'yt') song.vid = it.vid; else song.url = it.url;
+  if (!title) { song.noName = true; song.name = it.kind === 'yt' ? 'Видео с YouTube' : 'Трек с SoundCloud'; }
+  return song;
+}
+// по 6 треков за раз: большой плейлист переносится за секунды, а не минуты
+async function addNet(items, title) {
+  const out = [], fresh = [];
+  for (let k = 0; k < items.length; k += 6) {
+    showLoading(title ? 'Переношу плейлист' : 'Добавляю песню', title || '', k / items.length);
+    const part = await Promise.all(items.slice(k, k + 6).map((it) => songs.find((s) => s.id === netId(it)) || netSong(it)));
+    for (let s of part) {
+      const same = songs.find((x) => x.id === s.id) || fresh.find((x) => x.id === s.id); // один трек дважды в плейлисте
+      if (same) s = same; else { fresh.push(s); await DB.put(s); }
+      out.push(s);
+    }
+  }
+  songs.unshift(...fresh);
+  return out;
+}
+async function addUrl(text) {
+  if (!window.lnApp || !window.lnApp.oembed) return;
+  let p = parseNetUrl(text);
+  if (!p) { toast('Нужна ссылка на SoundCloud, YouTube или прямая ссылка на mp3'); return; }
+  try {
+    if (p.short) p = parseNetUrl(await window.lnApp.netFinal(p.url)) || p;
+    if (p.kind === 'file') {
+      showLoading('Скачиваю песню', p.url, 0);
+      const f = await window.lnApp.netFile(p.url);
+      $('loading').hidden = true;
+      await addFiles([new File([f.buf], f.name, { type: f.type })]);
+      return;
+    }
+    if (p.list) { await importList(p); return; }
+    const [s] = await addNet([p.kind === 'yt' ? { kind: 'yt', vid: p.vid } : { kind: 'sc', url: p.url }]);
+    if (plById(view) && !plById(view).ids.includes(s.id)) plById(view).ids.push(s.id);
+    savePls(); renderPls(); renderSongs();
+    toast(`Добавлено: ${s.name}`);
+    if (!cur || audio.paused) { pushHist(); load(s, true); }
+  } catch (e) {
+    toast(String((e && e.message) || e).replace(/^Error invoking remote method '[^']+': (Error: )?/, ''));
+  } finally { $('loading').hidden = true; }
+}
+// плейлист (или альбом, или лайки) переносится целиком и становится плейлистом Linea
+async function importList(p) {
+  showLoading('Переношу плейлист', 'Получаю список треков…', 0);
+  const src = p.kind === 'yt' ? p.list : p.url;
+  const [r, o] = await Promise.all([netList(p.kind, src), window.lnApp.oembed(p.kind, p.kind === 'yt' ? `https://www.youtube.com/playlist?list=${p.list}` : p.url).catch(() => null)]);
+  const items = (r.items || []).map((it) => Object.assign({ kind: p.kind }, it));
+  if (!items.length) { toast(r.err || 'Плейлист пустой, закрытый или не открылся'); return; }
+  let name = (o && o.title) || (p.kind === 'yt' ? 'Плейлист с YouTube' : 'Плейлист с SoundCloud');
+  if (o && o.author_name && name.endsWith(' by ' + o.author_name)) name = name.slice(0, -(' by ' + o.author_name).length);
+  const list = await addNet(items, name);
+  const pl = { id: 'p' + Date.now().toString(36), name: name.slice(0, 60), ids: [...new Set(list.map((s) => s.id))] };
+  playlists.push(pl);
+  view = pl.id;
+  savePls(); renderPls(); renderSongs(); upText();
+  toast(`Плейлист «${pl.name}»: треков ${pl.ids.length}`);
+  if (!cur) load(list[0], false);
+}
+function urlOpen() {
+  $('urlIn').value = '';
+  $('urlDlg').hidden = false;
+  $('urlIn').focus();
+}
+$('urlBtn').addEventListener('click', urlOpen);
+$('urlGo').addEventListener('click', () => { const v = $('urlIn').value; $('urlDlg').hidden = true; addUrl(v); });
+$('urlIn').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('urlGo').click(); });
+$('urlCancel').addEventListener('click', () => { $('urlDlg').hidden = true; });
+document.querySelectorAll('[data-site]').forEach((b) => b.addEventListener('click', () => { $('urlDlg').hidden = true; window.lnApp && window.lnApp.browse(b.dataset.site); }));
+if (window.lnApp && window.lnApp.onNetAdd) window.lnApp.onNetAdd((u) => addUrl(u));
+// Ctrl+V со ссылкой в любом месте плеера — сразу добавить
+addEventListener('paste', (e) => {
+  const t = e.target;
+  if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+  const v = (e.clipboardData && e.clipboardData.getData('text')) || '';
+  if (/^\s*https?:\/\//.test(v)) { e.preventDefault(); addUrl(v); }
+});
+// клип YouTube встаёт на место обложки; у SoundCloud и YouTube — ссылка на оригинал
+function netLook(s) {
+  const yt = !!s && s.kind === 'yt';
+  $('stage').classList.toggle('yt', yt);
+  $('srcLink').hidden = !(s && s.kind);
+  if (s && s.kind) $('srcLink').textContent = yt ? 'Открыть на YouTube' : 'Слушать на SoundCloud';
+}
+$('srcLink').addEventListener('click', () => { if (cur && cur.kind) window.open(netPage(cur)); });
+
 function renderSongs() {
   const box = $('songs');
   const keep = box.scrollTop;
@@ -242,7 +410,7 @@ function renderSongs() {
     const img = el.querySelector('img');
     if (s.imgUrl) img.src = s.imgUrl; else songImage(s).then(() => { img.src = s.imgUrl; });
     el.querySelector('b').textContent = s.name;
-    el.querySelector('small').textContent = `${s.artist ? s.artist + ' · ' : ''}${fmtDur(s.duration)}${lyricsOf(s) ? ' · слова' : ''}`;
+    el.querySelector('small').textContent = [s.artist, s.duration ? fmtDur(s.duration) : '', s.kind && (s.kind === 'yt' ? 'YouTube' : 'SoundCloud'), lyricsOf(s) && 'слова'].filter(Boolean).join(' · ');
     const del = el.querySelector('.del');
     del.addEventListener('click', async (e) => {
       e.stopPropagation();
@@ -581,6 +749,7 @@ function play(fadeIn) {
     analyser.connect(actx.destination);
   }
   if (actx.state === 'suspended') actx.resume();
+  if (audio === net) { net.play(); return; }
   const g = deckGain.get(audio).gain, now = actx.currentTime;
   g.cancelScheduledValues(now);
   if (fadeIn) { g.setValueAtTime(0, now); g.linearRampToValueAtTime(1, now + settings.xfade); } else g.setValueAtTime(1, now);
@@ -609,6 +778,7 @@ function showSong() {
   $('artist').textContent = cur ? cur.artist || 'Неизвестный исполнитель' : 'Добавь песни слева';
   $('dur').textContent = fmtDur(cur ? cur.duration : 0);
   document.title = cur ? `${cur.name} — Linea` : 'Linea';
+  netLook(cur);
   renderLines();
 }
 function upText() {
@@ -621,20 +791,26 @@ function upText() {
 }
 async function load(song, autoplay) {
   if (sync) syncDone(false);
-  // плавный переход: старая песня затихает на своей деке, новая нарастает на другой
-  const fade = !!(autoplay && actx && settings.xfade && cur && cur !== song && !audio.paused);
+  // плавный переход: старая песня затихает на своей деке, новая нарастает на другой (песни из интернета — без него)
+  const fade = !!(autoplay && actx && settings.xfade && cur && cur !== song && !audio.paused && audio !== net && !song.kind);
+  if (audio === net && !song.kind) { net.removeAttribute('src'); audio = decks[0]; }
   const other = decks[decks[0] === audio ? 1 : 0];
   if (fade) { fadeOut(audio); audio = other; } else other.pause();
   xfading = false;
   cur = song;
   store.set('ln.last', song.id);
-  setSrc(audio, srcOf(song));
-  audio.defaultPlaybackRate = audio.playbackRate = SPEEDS[settings.speed || 0][0];
-  audio.preservesPitch = false; // sped up и slowed как в тиктоке: вместе с темпом меняется и тон
+  if (song.kind) {
+    if (audio !== net) { audio.pause(); audio = net; }
+    net.open(song, autoplay);
+  } else {
+    setSrc(audio, srcOf(song));
+    audio.defaultPlaybackRate = audio.playbackRate = SPEEDS[settings.speed || 0][0];
+    audio.preservesPitch = false; // sped up и slowed как в тиктоке: вместе с темпом меняется и тон
+  }
   showSong(); upText(); renderSongs();
   if (slideDir) { const c = document.querySelector('.cover'); c.classList.remove('inNext', 'inPrev'); void c.offsetWidth; c.classList.add(slideDir > 0 ? 'inNext' : 'inPrev'); slideDir = 0; }
   waveDirty = true;
-  if (!song.wave) waveOf(song);
+  if (!song.wave && song.blob) waveOf(song);
   if (autoplay) play(fade);
   showModes();
   await songImage(song);
@@ -665,12 +841,13 @@ function step(d) {
 function setVolume(v) {
   settings.volume = Math.round(Math.max(0, Math.min(1, v)) * 20) / 20;
   decks.forEach((d) => { d.volume = settings.volume; });
+  net.volume = settings.volume;
   $('vol').value = settings.volume;
   $('vol').style.setProperty('--pos', settings.volume * 100 + '%');
   saveSettings();
 }
 // события слушаем у обеих дек, но реагируем только на текущую
-const onDeck = (ev, fn) => decks.forEach((d) => d.addEventListener(ev, (e) => { if (e.target === audio) fn(e); }));
+const onDeck = (ev, fn) => [...decks, net].forEach((d) => d.addEventListener(ev, (e) => { if (e.target === audio) fn(e); }));
 let xfading = false;
 onDeck('play', () => { vSync(true);  $('play').querySelector('path').setAttribute('d', PATH.pause); $('play').ariaLabel = 'Пауза'; });
 onDeck('seeked', () => vSync(true));
@@ -678,7 +855,7 @@ onDeck('ratechange', () => vSync(false));
 onDeck('pause', () => { vSync(false);  $('play').querySelector('path').setAttribute('d', PATH.play); $('play').ariaLabel = 'Играть'; });
 // за несколько секунд до конца начинаем следующую — получается переход без тишины
 onDeck('timeupdate', () => {
-  if (!settings.xfade || settings.repeat || sync || xfading || !audio.duration || audio.paused) return;
+  if (!settings.xfade || settings.repeat || sync || xfading || !audio.duration || audio.paused || audio === net) return;
   if ((audio.duration - audio.currentTime) / audio.playbackRate <= settings.xfade) { xfading = true; step(1); }
 });
 onDeck('ended', () => {
@@ -687,7 +864,7 @@ onDeck('ended', () => {
   // песня кончилась посреди разметки: сохраняем то, что успели
   if (sync.i) { sync.lines.length = sync.i; syncDone(true); } else syncDone(false);
 });
-onDeck('error', () => { if (cur) toast('Этот файл не играет. Попробуй mp3.'); });
+onDeck('error', () => { if (cur) toast(audio === net ? net.err || 'Трек не играет' : 'Этот файл не играет. Попробуй mp3.'); });
 // медиа-клавиши клавиатуры и наушников: работают и в свёрнутом окне
 if ('mediaSession' in navigator) {
   for (const [a, f] of [['play', play], ['pause', () => audio.pause()], ['previoustrack', () => step(-1)], ['nexttrack', () => step(1)]]) {
@@ -939,7 +1116,8 @@ function showModes() {
   $('spd').classList.toggle('on', sp[0] !== 1);
   $('shuf').ariaPressed = String(!!settings.shuffle);
   $('kar').ariaPressed = String(!!(settings.karaoke && cur && cur.inst));
-  $('kar').hidden = !(window.lnApp && window.lnApp.separate);
+  $('kar').hidden = !(window.lnApp && window.lnApp.separate) || !!(cur && cur.kind);
+  $('spd').hidden = !!(cur && cur.kind); // скорость и минус — только для своих файлов
   $('kar').title = cur && cur.inst ? 'Минус: песня без голоса' : 'Убрать голос из песни (нейросеть)';
   $('rep').ariaPressed = String(!!settings.repeat);
 }
@@ -1296,6 +1474,7 @@ addEventListener('keydown', (e) => {
   if (!$('sepDlg').hidden) { if (e.code === 'Escape') $('sepDlg').hidden = true; return; }
   if (!$('bgDlg').hidden) { if (e.code === 'Escape') $('bgDlg').hidden = true; return; }
   if (!$('findDlg').hidden) { if (e.code === 'Escape') $('findDlg').hidden = true; return; }
+  if (!$('urlDlg').hidden) { if (e.code === 'Escape') $('urlDlg').hidden = true; return; }
   if (!$('syncDlg').hidden || tag === 'TEXTAREA' || (tag === 'INPUT' && e.target.type !== 'range')) {
     if (e.code === 'Escape') { $('syncDlg').hidden = true; e.target.blur(); }
     return;

@@ -19,4 +19,11 @@ contextBridge.exposeInMainWorld('lnApp', {
   sepCancel: () => ipcRenderer.invoke('sep:cancel'),
   sepReady: () => ipcRenderer.invoke('sep:ready'),
   onSep: (fn) => ipcRenderer.on('sep:progress', (_e, d) => fn(d)),
+  netPort: () => ipcRenderer.invoke('net:port'),
+  oembed: (kind, url) => ipcRenderer.invoke('net:oembed', kind, url),
+  netImg: (url) => ipcRenderer.invoke('net:img', url),
+  netFile: (url) => ipcRenderer.invoke('net:file', url),
+  netFinal: (url) => ipcRenderer.invoke('net:final', url),
+  browse: (site) => ipcRenderer.send('browse:open', site),
+  onNetAdd: (fn) => ipcRenderer.on('net:add', (_e, url) => fn(url)),
 });

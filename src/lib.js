@@ -53,4 +53,34 @@ function peaks(data, n) {
   const max = Math.max(...out) || 1;
   return out.map((v) => Math.round((v / max) * 100) / 100);
 }
-if (typeof module !== 'undefined') module.exports = { hashStr, rng, fmtDur, cleanName, parseLRC, lineAt, retextLine, peaks };
+// ссылка → что это: видео/плейлист YouTube, трек/плейлист SoundCloud или прямая ссылка на файл
+function parseNetUrl(raw) {
+  let u;
+  try { u = new URL(String(raw).trim()); } catch { return null; }
+  if (!/^https?:$/.test(u.protocol)) return null;
+  const h = u.hostname.replace(/^(www\.|m\.|music\.)/, ''), seg = u.pathname.split('/').filter(Boolean);
+  if (h === 'youtu.be' || h === 'youtube.com') {
+    const v = h === 'youtu.be' ? seg[0] : u.searchParams.get('v') || (/^(shorts|embed|live)$/.test(seg[0] || '') ? seg[1] : '');
+    const list = u.searchParams.get('list');
+    if (list && (!v || u.pathname === '/playlist')) return { kind: 'yt', list };
+    return /^[\w-]{11}$/.test(v || '') ? { kind: 'yt', vid: v } : null;
+  }
+  if (h === 'on.soundcloud.com') return { kind: 'sc', short: true, url: u.href };
+  if (h === 'soundcloud.com' && seg.length) {
+    const url = `https://soundcloud.com/${seg.join('/')}`;
+    const list = seg.length === 1 || ['sets', 'likes', 'tracks', 'albums', 'reposts', 'popular-tracks'].includes(seg[1]);
+    return list ? { kind: 'sc', list: true, url } : { kind: 'sc', url };
+  }
+  if (/\.(mp3|ogg|wav|flac|m4a|opus|aac|mp4|webm)$/i.test(u.pathname)) return { kind: 'file', url: u.href };
+  return null;
+}
+// «Исполнитель - Песня (Official Video)» → { name, artist }; без тире исполнитель — автор канала
+function splitTitle(title, author) {
+  const junk = /\s*[([](official\s*)?(music\s*|lyrics?\s*|audio\s*|hd\s*|4k\s*|mv\s*|video\s*|visuali[sz]er\s*|клип\s*|премьера\s*)+[)\]]/gi;
+  let t = String(title || '').replace(junk, '').trim();
+  let a = String(author || '').replace(/\s*-\s*topic$/i, '').replace(/vevo$/i, '').replace(/\s*official$/i, '').trim();
+  const m = t.match(/^(.+?)\s+[-–—]\s+(.+)$/);
+  if (m) { a = m[1].trim(); t = m[2].trim(); } else if (a && t.endsWith(' by ' + a)) t = t.slice(0, -(' by ' + a).length);
+  return { name: t || 'Без названия', artist: a };
+}
+if (typeof module !== 'undefined') module.exports = { hashStr, rng, fmtDur, cleanName, parseLRC, lineAt, retextLine, peaks, parseNetUrl, splitTitle };

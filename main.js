@@ -1,5 +1,5 @@
 'use strict';
-const { app, BrowserWindow, ipcMain, net, globalShortcut, screen, Tray, Menu, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, net, globalShortcut, screen, Tray, Menu, nativeImage, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -33,7 +33,8 @@ function createWindow() {
   win.webContents.on('before-input-event', (e, input) => {
     if (input.type === 'keyDown' && input.key === 'F11') { win.setFullScreen(!win.isFullScreen()); e.preventDefault(); }
   });
-  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  // ссылки из плеера (логотип YouTube, «Открыть на SoundCloud») — в обычном браузере
+  win.webContents.setWindowOpenHandler(({ url }) => { if (/^https:\/\/([a-z0-9-]+\.)?(youtube\.com|youtu\.be|soundcloud\.com)\//.test(url)) shell.openExternal(url); return { action: 'deny' }; });
   win.webContents.on('will-navigate', (e) => e.preventDefault());
   win.loadFile(path.join(__dirname, 'src', 'index.html'));
   // портативная Linea запускается из временной папки, которая удаляется после выхода; чтобы значок,
@@ -265,6 +266,79 @@ ipcMain.on('app:prefs', (_e, q) => {
     if (tray && !img.isEmpty()) tray.setImage(img.resize({ width: 32, height: 32 }));
   }
 });
+// ==================== песни из интернета: SoundCloud и YouTube ====================
+// их официальные плееры живут в «мостике» — маленькой странице с localhost:
+// YouTube не встраивается в страницы с file:// (ошибка 153), а с localhost работает как на любом сайте
+const BRIDGE = { 'player.html': 'text/html; charset=utf-8', 'player.js': 'text/javascript; charset=utf-8' };
+let bridgePort = null;
+ipcMain.handle('net:port', () => bridgePort || (bridgePort = new Promise((res, rej) => {
+  const srv = require('http').createServer((req, rsp) => {
+    const name = (req.url || '').split('?')[0].replace(/^\//, '');
+    if (!BRIDGE[name]) { rsp.writeHead(404); rsp.end(); return; }
+    fs.readFile(path.join(__dirname, 'src', 'bridge', name), (err, buf) => {
+      if (err) { rsp.writeHead(500); rsp.end(); return; }
+      rsp.writeHead(200, { 'Content-Type': BRIDGE[name], 'Cache-Control': 'no-store' });
+      rsp.end(buf);
+    });
+  });
+  srv.on('error', (e) => { bridgePort = null; logLine('мостик:', String(e)); rej(e); });
+  srv.listen(0, '127.0.0.1', () => res(srv.address().port));
+})));
+// название и обложка по ссылке: официальный oEmbed, без ключей
+const OEMBED = { yt: 'https://www.youtube.com/oembed?format=json&url=', sc: 'https://soundcloud.com/oembed?format=json&url=' };
+ipcMain.handle('net:oembed', async (_e, kind, url) => {
+  if (!OEMBED[kind] || !/^https:\/\//.test(String(url))) return null;
+  try { const r = await net.fetch(OEMBED[kind] + encodeURIComponent(url), { headers: UA }); return r.ok ? await r.json() : null; } catch { return null; }
+});
+const getBytes = async (url, max, okType) => {
+  const r = await net.fetch(url, { headers: UA });
+  if (!r.ok) throw new Error(`Сервер ответил ${r.status}`);
+  const type = r.headers.get('content-type') || '';
+  if (okType && !okType.test(type) && !okType.test(url)) throw new Error('По ссылке не песня');
+  if (Number(r.headers.get('content-length')) > max) throw new Error('Файл слишком большой');
+  const buf = await r.arrayBuffer();
+  if (buf.byteLength > max) throw new Error('Файл слишком большой');
+  return { buf, type, url: r.url };
+};
+// обложки только с серверов SoundCloud и YouTube
+ipcMain.handle('net:img', async (_e, url) => {
+  if (!/^https:\/\/([a-z0-9-]+\.sndcdn\.com|i\.ytimg\.com)\//.test(String(url))) return null;
+  try { return (await getBytes(url, 5e6, /^image\//)).buf; } catch { return null; }
+});
+// прямая ссылка на mp3 и т.п. — скачиваем как обычный файл
+ipcMain.handle('net:file', async (_e, url) => {
+  if (!/^https?:\/\//.test(String(url))) throw new Error('Это не ссылка');
+  const f = await getBytes(url, 400e6, /^(audio|video)\/|\.(mp3|ogg|wav|flac|m4a|opus|aac|mp4|webm)(\?|$)/i);
+  return { buf: f.buf, type: f.type, name: decodeURIComponent(new URL(f.url).pathname.split('/').pop() || 'song.mp3') };
+});
+// короткие ссылки on.soundcloud.com ведут редиректом на настоящую
+ipcMain.handle('net:final', async (_e, url) => {
+  if (!/^https:\/\/on\.soundcloud\.com\//.test(String(url))) return url;
+  try { const r = await net.fetch(url, { headers: UA }); return r.url; } catch { return url; }
+});
+// поиск прямо в Linea: сайт SoundCloud или YouTube в своём окне и кнопка «В Linea»
+const SITES = { sc: 'https://soundcloud.com/discover', yt: 'https://www.youtube.com/' };
+let browse = null;
+ipcMain.on('browse:open', (_e, site) => {
+  if (!SITES[site]) return;
+  if (!browse) {
+    browse = new BrowserWindow({
+      width: 1100, height: 780, title: 'Найти песню', icon: iconPath(prefs.icon), autoHideMenuBar: true, backgroundColor: '#09090D',
+      webPreferences: { preload: path.join(__dirname, 'preload-browse.js'), contextIsolation: true, nodeIntegration: false, sandbox: true, partition: 'persist:browse' },
+    });
+    // сайты не пускают «Electron», представляемся обычным Chrome
+    browse.webContents.setUserAgent(browse.webContents.getUserAgent().replace(/ (Electron|linea)\/\S+/gi, ''));
+    browse.webContents.setWindowOpenHandler(({ url }) => { if (/^https:\/\//.test(url)) browse.loadURL(url); return { action: 'deny' }; });
+    browse.on('closed', () => { browse = null; });
+  }
+  browse.loadURL(SITES[site]);
+  browse.show(); browse.focus();
+});
+ipcMain.on('browse:add', (e, url) => {
+  if (!browse || e.sender !== browse.webContents || !win) return;
+  win.webContents.send('net:add', String(url).slice(0, 2000));
+});
+
 // ==================== обновления по воздуху ====================
 // установленная Linea сама проверяет релизы на GitHub, тихо качает новую версию и предлагает перезапуститься
 let updReady = null;

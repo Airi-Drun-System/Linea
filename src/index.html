@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self'; frame-src http://127.0.0.1:*">
 <title>Linea</title>
 <style>
 @font-face{font-family:"Dela Gothic One";font-weight:400;font-display:block;src:url(fonts/dela-gothic-one-cyrillic-400-normal.woff2) format("woff2");unicode-range:U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116}
@@ -133,6 +133,23 @@ body.lib .scrim{opacity:1;pointer-events:auto}
 .cover{position:relative;aspect-ratio:1;border-radius:24px;overflow:hidden;background:rgb(var(--bg-rgb));transform:scale(calc(1 + var(--kick)*.035));box-shadow:0 24px 70px rgba(0,0,0,.45)}
 .cover img{width:100%;height:100%;object-fit:cover;display:block}
 .cover img[src^="icons/"]{object-fit:contain;padding:18%;box-sizing:border-box}
+/* песни из интернета: мостик с плеерами живёт в обложке, виден только клип YouTube */
+.cover .bridge{position:absolute;inset:0;width:100%;height:100%;border:0;visibility:hidden;background:#000}
+.stage{container-type:size}
+.stage.yt .cover{aspect-ratio:16/9;height:auto;width:min(100%,calc(min(100cqh,420px)*16/9));transform:none;cursor:default}
+.stage.yt .cover .bridge{visibility:visible}
+/* слова рядом с клипом, а не поверх: YouTube не разрешает закрывать плеер; меньше 356×200 он тоже не должен быть */
+.stage.yt.lyrOn .cover{opacity:1;pointer-events:auto;position:absolute;left:0;top:50%;translate:0 -50%;width:max(356px,min(46%,560px))}
+.stage.yt.lyrOn .lyr{left:calc(max(356px,min(46%,560px)) + 24px)}
+@container (max-width:760px){
+  .stage.yt.lyrOn .cover{left:50%;top:0;translate:-50% 0;width:356px}
+  .stage.yt.lyrOn .lyr{left:0;top:216px}
+}
+.srcLink{margin-top:6px;font:700 13px var(--ui);color:var(--dim);text-decoration:underline;text-underline-offset:3px}
+.srcLink:hover{color:var(--fg)}
+.netBtn{padding:10px 12px;border-radius:14px;background:var(--glass-2);border:1px solid var(--line);font:700 13px var(--ui);color:var(--fg);text-align:left}
+.netBtn:hover{background:rgba(var(--fg-rgb),.17)}
+.card .small{font-size:13px}
 .meta.swap>*{animation:rise .6s var(--ease) both}
 .meta.swap>:nth-child(2){animation-delay:.05s}
 .meta h1{font:clamp(24px,2.6vw,36px)/1.08 var(--display);letter-spacing:-.02em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -328,6 +345,7 @@ body.liquid .over{backdrop-filter:blur(6px);background:rgba(var(--shade-rgb),.35
       <span class="plus">+</span>
       <span><b>Добавить песни</b><small>mp3, flac, wav или видео mp4: перетащи или нажми</small></span>
     </label>
+  <button class="netBtn" id="urlBtn">Из интернета: SoundCloud, YouTube, ссылка</button>
   <div class="plHead"><b>Плейлисты</b><button class="mini" id="plNew" title="Новый плейлист" aria-label="Новый плейлист">+</button></div>
   <div class="pls" id="pls"></div>
   <input class="find" id="find" placeholder="Поиск по песням" spellcheck="false" aria-label="Поиск по песням">
@@ -347,7 +365,7 @@ body.liquid .over{backdrop-filter:blur(6px);background:rgba(var(--shade-rgb),.35
       <div class="cover"><img id="coverImg" alt=""></div>
       <section class="lyr" id="lyr"><div class="lines" id="lines"></div></section>
     </section>
-    <div class="meta" id="meta"><h1 id="title">Linea</h1><p id="artist">Добавь песни слева</p></div>
+    <div class="meta" id="meta"><h1 id="title">Linea</h1><p id="artist">Добавь песни слева</p><button class="srcLink" id="srcLink" hidden></button></div>
     <div class="seek"><span id="cur">0:00</span><div class="wave"><canvas id="waveCv"></canvas><input type="range" id="seek" min="0" max="1000" value="0" aria-label="Перемотка"></div><span id="dur">0:00</span></div>
     <div class="btns">
           <button class="step" id="prev" aria-label="Предыдущая"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5h2v14H6zM20 5v14L9 12z"/></svg></button>
@@ -384,6 +402,18 @@ body.liquid .over{backdrop-filter:blur(6px);background:rgba(var(--shade-rgb),.35
     <p>Для мешапа или ремикса впиши оригинал: «Исполнитель — Песня». Если слова с таймингами не подойдут по длине, найдётся текст, и его останется разметить.</p>
     <input class="find" id="findQ" spellcheck="false" placeholder="Исполнитель — Песня">
     <div class="acts"><button class="main" id="findGo">Искать</button><button id="findCancel">Отмена</button></div>
+  </div>
+</div>
+
+<div class="over" id="urlDlg" hidden>
+  <div class="card">
+    <h3>Песни из интернета</h3>
+    <p>Вставь ссылку на трек, плейлист или альбом с SoundCloud, на видео или плейлист с YouTube, или прямую ссылку на mp3. Плейлист перенесётся целиком.</p>
+    <input class="find" id="urlIn" spellcheck="false" placeholder="https://soundcloud.com/…">
+    <div class="acts"><button class="main" id="urlGo">Добавить</button><button id="urlCancel">Отмена</button></div>
+    <p class="small">Или найди песню прямо на сайте и нажми там «В Linea»:</p>
+    <div class="acts"><button data-site="sc">Найти на SoundCloud</button><button data-site="yt">Найти на YouTube</button></div>
+    <p class="small">Ссылку можно и просто вставить в плеер: Ctrl+V.</p>
   </div>
 </div>
 
