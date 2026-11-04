@@ -119,9 +119,14 @@ ipcMain.on('win:act', (_e, a) => {
 let overlay = null;
 const OV_FILE = () => path.join(app.getPath('userData'), 'overlay.json');
 function ovBounds() {
-  try { const b = JSON.parse(fs.readFileSync(OV_FILE(), 'utf8')); if (screen.getAllDisplays().some((d) => b.x >= d.bounds.x - 50 && b.x < d.bounds.x + d.bounds.width && b.y >= d.bounds.y - 50 && b.y < d.bounds.y + d.bounds.height)) return b; } catch { /* первый запуск */ }
+  const W = 760, H = 96; // компактная плашка: место сохраняем, размер всегда этот
+  try {
+    const b = JSON.parse(fs.readFileSync(OV_FILE(), 'utf8'));
+    const x = Math.round(b.x + ((b.width || W) - W) / 2), y = Math.round(b.y + ((b.height || H) - H) / 2);
+    if (screen.getAllDisplays().some((d) => x >= d.bounds.x - 50 && x < d.bounds.x + d.bounds.width && y >= d.bounds.y - 50 && y < d.bounds.y + d.bounds.height)) return { width: W, height: H, x, y };
+  } catch { /* первый запуск */ }
   const wa = screen.getPrimaryDisplay().workArea;
-  return { width: 960, height: 170, x: Math.round(wa.x + (wa.width - 960) / 2), y: wa.y + wa.height - 210 };
+  return { width: W, height: H, x: Math.round(wa.x + (wa.width - W) / 2), y: wa.y + wa.height - H - 40 };
 }
 function openOverlay() {
   if (overlay && !overlay.isDestroyed()) return;
