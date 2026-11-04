@@ -95,14 +95,24 @@ ipcMain.on('log', (_e, m) => logLine('окно:', String(m).slice(0, 2000)));
 
 // ==================== стрелки везде, как в Soundpad ====================
 // Пока включено, ← и → принадлежат Linea во всех программах: переключают песни, даже если окно свёрнуто
-ipcMain.handle('keys:global', (_e, on) => {
-  const KEYS = { Left: -1, Right: 1, PageDown: 'play', PageUp: 'pause' }; // PgDn — играть, PgUp — стоп
-  for (const k of Object.keys(KEYS)) globalShortcut.unregister(k);
-  if (!on) return true;
+const KEYS = { Left: -1, Right: 1, PageDown: 'play', PageUp: 'pause' }; // PgDn — играть, PgUp — стоп
+let keysOn = false;
+// занятые клавиши (например, их держит ещё открытая старая Linea) пробуем забрать снова, пока не получится
+function grabKeys() {
   let ok = true;
   for (const [k, v] of Object.entries(KEYS)) {
-    ok = globalShortcut.register(k, () => { if (win && !win.isDestroyed()) win.webContents.send('keys:step', v); }) && ok;
+    if (globalShortcut.isRegistered(k)) continue;
+    const got = globalShortcut.register(k, () => { if (win && !win.isDestroyed()) win.webContents.send('keys:step', v); });
+    if (!got) ok = false;
   }
+  return ok;
+}
+setInterval(() => { if (keysOn) grabKeys(); }, 3000);
+ipcMain.handle('keys:global', (_e, on) => {
+  keysOn = !!on;
+  if (!on) { for (const k of Object.keys(KEYS)) globalShortcut.unregister(k); return true; }
+  const ok = grabKeys();
+  logLine('клавиши везде:', ok ? 'все заняты Linea' : 'часть занята другой программой');
   return ok;
 });
 
