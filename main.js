@@ -36,6 +36,12 @@ function createWindow() {
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   win.webContents.on('will-navigate', (e) => e.preventDefault());
   win.loadFile(path.join(__dirname, 'src', 'index.html'));
+  // портативная Linea запускается из временной папки, которая удаляется после выхода; чтобы значок,
+  // закреплённый на панели задач, не ломался, говорим Windows запускать сам портативный .exe
+  const portable = process.env.PORTABLE_EXECUTABLE_FILE;
+  if (process.platform === 'win32' && portable) {
+    try { win.setAppDetails({ appId: 'com.vegasdev.linea', relaunchCommand: `"${portable}"`, relaunchDisplayName: 'Linea', appIconPath: portable, appIconIndex: 0 }); } catch (e) { logLine('ярлык на панели задач:', String(e)); }
+  }
   // крестик прячет в трей (музыка играет дальше); совсем выйти — через значок в трее
   win.on('close', (e) => {
     if (quitting || !prefs.tray) return;
@@ -222,6 +228,7 @@ app.on('second-instance', () => {
   showWin();
   win.webContents.send('keys:step', 'already');
 });
+if (process.platform === 'win32') app.setAppUserModelId('com.vegasdev.linea');
 app.whenReady().then(() => { logLine('Linea запущен', app.getVersion(), process.platform, os.release()); createWindow(); makeTray(); });
 // ==================== значок в трее ====================
 let tray = null, quitting = false;
