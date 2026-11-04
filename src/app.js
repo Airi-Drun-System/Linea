@@ -927,7 +927,7 @@ async function setGlobalKeys(on, quiet) {
   const ok = await window.lnApp.globalKeys(on);
   if (on && !ok && !quiet) toast('Стрелки уже заняты другой программой');
 }
-if (window.lnApp && window.lnApp.onStep) window.lnApp.onStep((d) => step(d));
+if (window.lnApp && window.lnApp.onStep) window.lnApp.onStep((d) => (d === 'play' ? play() : d === 'pause' ? audio.pause() : step(d)));
 
 let ovMove = false, ovLast = '';
 function ovApply() { if (window.lnApp && window.lnApp.overlay) window.lnApp.overlay({ on: !!settings.overlay, move: ovMove }); }
@@ -1124,6 +1124,8 @@ document.body.classList.toggle('libHide', !!settings.libHide);
 $('libClose').addEventListener('click', () => libOpen(false));
 $('scrim').addEventListener('click', () => libOpen(false));
 $('songs').addEventListener('click', (e) => { if (e.target.closest('.song') && !e.target.closest('.del')) libOpen(false); });
+document.querySelectorAll('[data-win]').forEach((b) => b.addEventListener('click', () => window.lnApp && window.lnApp.win && window.lnApp.win(b.dataset.win)));
+if (!(window.lnApp && window.lnApp.win)) document.querySelector('.winBtns').hidden = true;
 $('lyrBtn').addEventListener('click', () => { settings.lyricsOn = settings.lyricsOn === false; saveSettings(); renderLines(); });
 // кнопка, нажатая мышью, не держит фокус: пробел остаётся паузой
 addEventListener('mouseup', (e) => { const b = e.target.closest && e.target.closest('button,input[type=range]'); if (b) b.blur(); });
@@ -1147,7 +1149,7 @@ addEventListener('keydown', (e) => {
     return;
   }
   if (e.code === 'Space' && tag === 'BUTTON') return; // кнопку с фокусом клавиатуры пробел нажмёт сам
-  const act = { ArrowRight: () => step(1), ArrowLeft: () => step(-1), Space: toggle, ArrowUp: () => setVolume(settings.volume + 0.05), ArrowDown: () => setVolume(settings.volume - 0.05) }[e.code];
+  const act = { ArrowRight: () => step(1), ArrowLeft: () => step(-1), Space: toggle, PageDown: () => play(), PageUp: () => audio.pause(), ArrowUp: () => setVolume(settings.volume + 0.05), ArrowDown: () => setVolume(settings.volume - 0.05) }[e.code];
   if (!act) return;
   e.preventDefault();
   if (!e.repeat || e.code === 'ArrowUp' || e.code === 'ArrowDown') act();

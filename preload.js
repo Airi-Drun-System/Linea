@@ -5,6 +5,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('lnApp', {
   findLyrics: (q) => ipcRenderer.invoke('lyrics:find', q),
   log: (m) => ipcRenderer.send('log', m),
+  win: (a) => ipcRenderer.send('win:act', a),
   globalKeys: (on) => ipcRenderer.invoke('keys:global', on),
   onStep: (fn) => ipcRenderer.on('keys:step', (_e, d) => fn(d)),
   overlay: (q) => ipcRenderer.invoke('overlay:set', q),

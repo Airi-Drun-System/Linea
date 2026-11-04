@@ -97,7 +97,14 @@ body.lib .scrim{opacity:1;pointer-events:auto}
 .side .none{color:var(--dim);font-size:13px;padding:8px 4px}
 
 /* ---------- сейчас играет: всё по центру ---------- */
-.topbar{display:flex;align-items:center;justify-content:space-between;flex:none}
+.topbar{display:flex;align-items:center;gap:6px;flex:none;-webkit-app-region:drag;margin-top:-10px;padding-top:6px}
+.topbar button{-webkit-app-region:no-drag}
+.grow{flex:1}
+.winBtns{display:flex;gap:2px;margin-left:8px}
+.winBtns button{width:40px;height:32px;border-radius:8px;display:grid;place-items:center;color:var(--dim)}
+.winBtns svg{width:12px;height:12px;fill:none;stroke:currentColor;stroke-width:1.2}
+.winBtns button:hover{background:var(--glass-2);color:var(--fg)}
+.winBtns .close:hover{background:#E81123;color:#fff}
 .brandBtn{display:flex;align-items:center;gap:10px;padding:6px 14px 6px 6px;border-radius:99px;font:20px var(--display);letter-spacing:-.01em}
 .brandBtn img{width:36px;height:36px;object-fit:contain}
 .brandBtn small{font:600 14px var(--ui);color:var(--dim);margin-left:4px}
@@ -307,7 +314,9 @@ body.liquid .over{backdrop-filter:blur(6px);background:rgba(6,6,9,.35)}
 <div class="app">
   <header class="topbar">
     <button class="brandBtn" id="libBtn" title="Мои песни"><img src="logo.png" alt=""><span>Linea</span><small>Песни</small></button>
+    <span class="grow"></span>
     <button class="iconBtn" id="bgBtn" aria-label="Настройки" title="Настройки"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.4 13a7.6 7.6 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7.4 7.4 0 0 0-1.7-1L15 3h-4l-.4 2.7a7.4 7.4 0 0 0-1.7 1l-2.5-1-2 3.5L6.6 11a7.6 7.6 0 0 0 0 2l-2.2 1.6 2 3.5 2.5-1a7.4 7.4 0 0 0 1.7 1L11 21h4l.4-2.7a7.4 7.4 0 0 0 1.7-1l2.5 1 2-3.5zM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z" transform="translate(-1 0)"/></svg></button>
+    <span class="winBtns"><button data-win="min" aria-label="Свернуть"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 6.5h8"/></svg></button><button data-win="max" aria-label="Развернуть"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 2.5h7v7h-7z"/></svg></button><button data-win="close" class="close" aria-label="Закрыть"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 2.5l7 7M9.5 2.5l-7 7"/></svg></button></span>
   </header>
   <main class="center">
     <section class="stage" id="stage">
@@ -390,10 +399,10 @@ body.liquid .over{backdrop-filter:blur(6px);background:rgba(6,6,9,.35)}
     <div class="acts"><button id="bgSong">Своя картинка для этой песни</button></div>
     <h4>Вид и звук</h4>
     <label class="field">Плавный переход между песнями<select id="xfSel"><option value="0">Выключен</option><option value="3">3 секунды</option><option value="6">6 секунд</option><option value="10">10 секунд</option></select></label>
-    <label class="chk pcOnly"><input type="checkbox" id="keysG"><span></span>Стрелки ← → переключают песни везде, даже в других программах и играх</label>
+    <label class="chk pcOnly"><input type="checkbox" id="keysG"><span></span>Клавиши ← → (песни), PgDn (играть) и PgUp (стоп) работают везде, даже в других программах и играх</label>
     <div class="ovRow pcOnly"><label class="chk"><input type="checkbox" id="ovOn"><span></span>Слова поверх игр</label><button class="chipB" id="ovMove" hidden>Подвинуть</button></div>
     <label class="field">Стекло<select id="glassSel"><option value="liquid">Жидкое: преломляет фон, как линза</option><option value="plain">Обычное: размытое, легче для слабых компьютеров</option></select></label>
-    <p class="keys"><kbd>←</kbd> <kbd>→</kbd> песни · <kbd>Пробел</kbd> пауза · <kbd>↑</kbd> <kbd>↓</kbd> громкость · <kbd>Esc</kbd> закрыть</p>
+    <p class="keys"><kbd>←</kbd> <kbd>→</kbd> песни · <kbd>Пробел</kbd> пауза · <kbd>↑</kbd> <kbd>↓</kbd> громкость · <kbd>PgDn</kbd> играть · <kbd>PgUp</kbd> стоп · <kbd>Esc</kbd> закрыть</p>
     <div class="acts"><button class="main" id="bgClose">Готово</button></div>
   </div>
 </div>

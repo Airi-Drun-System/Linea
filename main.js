@@ -21,6 +21,7 @@ function createWindow() {
     width: 1280, height: 800, minWidth: 900, minHeight: 600,
     backgroundColor: '#09090D',
     title: 'Linea',
+    frame: false, // своя шапка вместо системной полоски с заголовком
     icon: path.join(__dirname, 'build', 'icon.png'),
     autoHideMenuBar: true,
     webPreferences: {
@@ -95,13 +96,22 @@ ipcMain.on('log', (_e, m) => logLine('окно:', String(m).slice(0, 2000)));
 // ==================== стрелки везде, как в Soundpad ====================
 // Пока включено, ← и → принадлежат Linea во всех программах: переключают песни, даже если окно свёрнуто
 ipcMain.handle('keys:global', (_e, on) => {
-  globalShortcut.unregister('Left');
-  globalShortcut.unregister('Right');
+  const KEYS = { Left: -1, Right: 1, PageDown: 'play', PageUp: 'pause' }; // PgDn — играть, PgUp — стоп
+  for (const k of Object.keys(KEYS)) globalShortcut.unregister(k);
   if (!on) return true;
-  const send = (d) => () => { if (win && !win.isDestroyed()) win.webContents.send('keys:step', d); };
-  const ok = globalShortcut.register('Left', send(-1)) && globalShortcut.register('Right', send(1));
-  if (!ok) { globalShortcut.unregister('Left'); globalShortcut.unregister('Right'); }
+  let ok = true;
+  for (const [k, v] of Object.entries(KEYS)) {
+    ok = globalShortcut.register(k, () => { if (win && !win.isDestroyed()) win.webContents.send('keys:step', v); }) && ok;
+  }
   return ok;
+});
+
+// кнопки окна в своей шапке
+ipcMain.on('win:act', (_e, a) => {
+  if (!win || win.isDestroyed()) return;
+  if (a === 'min') win.minimize();
+  else if (a === 'max') { if (win.isMaximized()) win.unmaximize(); else win.maximize(); }
+  else if (a === 'close') win.close();
 });
 
 // ==================== слова поверх игр ====================
