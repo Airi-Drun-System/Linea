@@ -130,6 +130,23 @@ function autoLyrics(env, plain) {
   const at = best ? best.idx.map((c) => fr[c]) : lines.map((_, i) => (i * F) / n);
   return lines.map((text, i) => ({ t: Math.max(0, Math.round(at[i] * 50 - 100)), text })); // чуть раньше голоса, как при разметке пробелом
 }
+// громкость песни для выравнивания, [rms, пик] в дБ: средняя по блокам 0.4 с без тишины и тихих мест
+// (вступления, затухания) — как в стандарте EBU R128, только без частотной поправки
+function loudness(L, R, rate) {
+  const n = Math.round(rate * 0.4), ms = [], db = (x) => 10 * Math.log10(x);
+  let peak = 0;
+  for (let i = 0; i + n <= L.length; i += n) {
+    let s = 0;
+    for (let k = i; k < i + n; k++) { const a = L[k], b = R ? R[k] : a; s += a * a + b * b; peak = Math.max(peak, Math.abs(a), Math.abs(b)); }
+    ms.push(s / (2 * n));
+  }
+  const mean = (a) => a.reduce((s, x) => s + x, 0) / a.length;
+  const loud = ms.filter((x) => db(x) > -70), gated = loud.filter((x) => db(x) > db(mean(loud)) - 10);
+  return [gated.length ? Math.round(db(mean(gated)) * 10) / 10 : -70, Math.round(20 * Math.log10(peak || 1e-9) * 10) / 10];
+}
+// сколько дБ добавить песне: тянем к −14 дБ; тише чем на 12 дБ не делаем, а громче — только пока пики не упрутся
+// в потолок (пик меряем на 8 кГц, он чуть занижен — отсюда запас 2 дБ)
+const normDb = (rms, peak) => Math.max(-12, Math.min(-14 - rms, 6, Math.max(0, -2 - peak)));
 // ссылка → что это: видео/плейлист YouTube, трек/плейлист SoundCloud или прямая ссылка на файл
 function parseNetUrl(raw) {
   let u;
@@ -185,4 +202,4 @@ async function lrclibFind(getJson, q) {
     return plain ? { plain } : null;
   } catch { return null; }
 }
-if (typeof module !== 'undefined') module.exports = { lrclibFind, hashStr, rng, fmtDur, cleanName, parseLRC, lineAt, retextLine, peaks, voiceEnv, autoLyrics, parseNetUrl, splitTitle };
+if (typeof module !== 'undefined') module.exports = { lrclibFind, hashStr, rng, fmtDur, cleanName, parseLRC, lineAt, retextLine, peaks, voiceEnv, autoLyrics, loudness, normDb, parseNetUrl, splitTitle };

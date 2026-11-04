@@ -766,6 +766,8 @@ function renderBgDlg() {
   $('bgReact').checked = !!BG.react;
   $('glassSel').value = settings.glass || 'liquid';
   $('xfSel').value = String(settings.xfade || 0);
+  document.querySelectorAll('#eqSeg button').forEach((b) => b.classList.toggle('on', Number(b.dataset.eq) === (settings.eq || 0)));
+  $('normOn').checked = settings.norm !== false;
   $('fxSel').value = settings.fx || 'snow';
   document.querySelectorAll('.icoB').forEach((b) => b.classList.toggle('on', b.dataset.ico === (settings.icon || 'grey')));
   $('accAuto').classList.toggle('on', !settings.accent);
@@ -843,6 +845,8 @@ $('bgSongFile').addEventListener('change', (e) => {
 });
 $('glassSel').addEventListener('change', () => { settings.glass = $('glassSel').value; saveSettings(); lgRefresh(); });
 $('xfSel').addEventListener('change', () => { settings.xfade = Number($('xfSel').value); saveSettings(); });
+document.querySelectorAll('#eqSeg button').forEach((b) => b.addEventListener('click', () => { settings.eq = Number(b.dataset.eq); saveSettings(); soundFx(); renderBgDlg(); }));
+$('normOn').addEventListener('change', () => { settings.norm = $('normOn').checked; saveSettings(); soundFx(); });
 $('keysG').addEventListener('change', () => setGlobalKeys($('keysG').checked));
 $('ovOn').addEventListener('change', () => { settings.overlay = $('ovOn').checked; saveSettings(); ovMove = false; ovApply(); renderBgDlg(); });
 $('ovMove').addEventListener('click', () => { ovMove = !ovMove; ovApply(); renderBgDlg(); });
@@ -907,6 +911,19 @@ function lgRefresh() {
 lgRefresh();
 // ==================== воспроизведение ====================
 let actx = null, analyser = null, freq = null;
+// эквалайзер и выравнивание громкости — только на своих деках: SoundCloud и YouTube играют в своём плеере в мостике,
+// до их звука WebAudio не дотягивается
+const EQ = [[0, 0, 0, 0], [6, 0, 1, -4], [-3, 4, 1, -2], [-6, 1, -4, 0]]; // низ, середина, верх, запас против перегруза
+const deckSong = new Map(), deckFx = new Map();
+function soundFx(tc = 0.1) {
+  if (!actx) return;
+  const p = EQ[settings.eq || 0], now = actx.currentTime;
+  for (const [d, { f, n }] of deckFx) {
+    const s = deckSong.get(d), db = p[3] + (settings.norm !== false && s && s.loud ? normDb(...s.loud) : 0);
+    f.forEach((x, i) => x.gain.setTargetAtTime(p[i], now, tc));
+    n.gain.setTargetAtTime(10 ** (db / 20), now, tc);
+  }
+}
 const PATH = { play: 'M8 5v14l11-7z', pause: 'M6 5h4v14H6zM14 5h4v14h-4z' };
 function play(fadeIn) {
   if (!cur) { if (songs[0]) load(songs[0], true); return; }
@@ -917,8 +934,14 @@ function play(fadeIn) {
     analyser.fftSize = 256;
     analyser.smoothingTimeConstant = 0.7;
     freq = new Uint8Array(analyser.frequencyBinCount);
-    decks.forEach((d) => { const g = actx.createGain(); actx.createMediaElementSource(d).connect(g); g.connect(analyser); deckGain.set(d, g); });
+    decks.forEach((d) => {
+      const f = [['lowshelf', 120], ['peaking', 2500], ['highshelf', 8000]].map(([type, frequency]) => new BiquadFilterNode(actx, { type, frequency, Q: 0.9 }));
+      const n = actx.createGain(), g = actx.createGain();
+      [actx.createMediaElementSource(d), ...f, n, g, analyser].reduce((a, b) => a.connect(b));
+      deckFx.set(d, { f, n }); deckGain.set(d, g);
+    });
     analyser.connect(actx.destination);
+    soundFx(0);
   }
   if (actx.state === 'suspended') actx.resume();
   if (audio === net) { net.play(); return; }
@@ -984,6 +1007,7 @@ async function load(song, autoplay) {
     net.open(song, autoplay);
   } else {
     setSrc(audio, srcOf(song));
+    deckSong.set(audio, song); soundFx(0); // дека пока молчит — новую громкость ставим сразу
     audio.defaultPlaybackRate = audio.playbackRate = SPEEDS[settings.speed || 0][0];
     audio.preservesPitch = false; // sped up и slowed как в тиктоке: вместе с темпом меняется и тон
   }
@@ -1398,20 +1422,22 @@ let waveDirty = true, wavePx = -1, waveQ = Promise.resolve();
 function waveOf(song) { waveQ = waveQ.then(() => song === cur && analyze(song)).catch(() => {}); }
 async function analyze(song) {
   const auto = autoNeed(song);
-  if (!decodable(song) || (song.wave && !auto)) return;
+  if (!decodable(song) || (song.wave && song.loud && !auto)) return;
   // 8 кГц хватает и волне, и полосе голоса (до 3400 Гц), и считается быстро
   const buf = await new OfflineAudioContext(1, 1, 8000).decodeAudioData(await song.blob.arrayBuffer()).catch(() => null);
   if (!buf) return; // не декодируется — останется ровная полоска
-  const ch = buf.getChannelData(0);
+  const ch = buf.getChannelData(0), ch2 = buf.numberOfChannels > 1 ? buf.getChannelData(1) : null;
   if (!song.wave) song.wave = peaks(ch, 200);
+  if (!song.loud) song.loud = loudness(ch, ch2, 8000);
   let made = false;
   if (auto && autoNeed(song)) { // пока декодировали, слова могли найтись или их разметили вручную
-    const lines = autoLyrics(voiceEnv(ch, buf.numberOfChannels > 1 ? buf.getChannelData(1) : null, 8000), song.plain);
+    const lines = autoLyrics(voiceEnv(ch, ch2, 8000), song.plain);
     if (lines.length) { Object.assign(song, { lyrics: lines, lyrOff: 0, lyrAuto: true }); made = true; }
   }
   saveSong(song);
   if (song !== cur) return;
   waveDirty = true;
+  soundFx();
   if (made) { renderLines(); renderSongs(); }
 }
 // полоса перемотки: сыгранная часть — живая волна (как загрузка в Google Play), по ней бежит котокролик;

@@ -1,6 +1,6 @@
 'use strict';
 const assert = require('assert');
-const { parseLRC, lineAt, fmtDur, cleanName, retextLine, peaks, voiceEnv, autoLyrics, parseNetUrl, splitTitle, lrclibFind } = require('../src/lib.js');
+const { parseLRC, lineAt, fmtDur, cleanName, retextLine, peaks, voiceEnv, autoLyrics, loudness, normDb, parseNetUrl, splitTitle, lrclibFind } = require('../src/lib.js');
 
 const L = parseLRC('[ar:x]\n[00:01.50]раз\n[00:00.20][00:03.00]два\nбез метки\n[01:02.5]три');
 assert.deepStrictEqual(L.map((l) => [Math.round(l.t), l.text]), [[200, 'два'], [1500, 'раз'], [3000, 'два'], [62500, 'три']]);
@@ -67,6 +67,20 @@ assert.deepStrictEqual(autoLyrics(env, '\n [Intro] \n'), []);
 // полоса голоса: бас глушится больше чем на 30 дБ; звук только в одном канале или в противофазе — не голос
 const one = (f, g = 1) => voiceEnv(Float32Array.from({ length: SR }, (_, i) => tone(f, i / SR)), Float32Array.from({ length: SR }, (_, i) => g * tone(f, i / SR)), SR)[10];
 assert.ok(one(60) / one(1000) < 0.03 && one(1000, 0) === 0 && one(1000, -1) === 0 && Math.abs(one(1000) - Math.SQRT1_2) < 0.05);
+// громкость: синус 0.5 — это −9 дБ rms и −6 дБ пик; тишина и тихое вступление не тянут среднее вниз
+const sine = (a, sec) => Array.from({ length: sec * SR }, (_, i) => a * tone(1000, i / SR));
+const lz = (x) => loudness(Float32Array.from(x), null, SR);
+assert.deepStrictEqual(lz(sine(0.5, 10)), [-9, -6]);
+assert.deepStrictEqual(lz([...sine(0.5, 10), ...new Array(10 * SR).fill(0)]), [-9, -6]);
+assert.deepStrictEqual(lz([...sine(0.016, 4), ...sine(0.5, 10)]), [-9, -6]);
+assert.deepStrictEqual(loudness(Float32Array.from(sine(0.5, 2)), new Float32Array(2 * SR), SR), [-12, -6]); // один канал из двух
+assert.deepStrictEqual(lz(new Array(SR).fill(0)), [-70, -180]);
+// громкую песню тише, тихую громче, но не выше пиков; совсем тихую не задираем больше чем на 6 дБ
+assert.strictEqual(normDb(-8, -0.1), -6);
+assert.strictEqual(normDb(-20, -8), 6);
+assert.strictEqual(normDb(-20, -1), 0);
+assert.strictEqual(normDb(-17, -6), 3);
+assert.strictEqual(normDb(0, 0), -12);
 // слова: точное совпадение, потом поиск с близкой длиной
 (async () => {
   const db = { get: { plainLyrics: 'p' }, search: [{ duration: 300, syncedLyrics: 'far' }, { duration: 182, syncedLyrics: 'near' }] };

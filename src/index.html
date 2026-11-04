@@ -284,6 +284,7 @@ input[type=range]:hover::-webkit-slider-thumb{transform:scale(1.25)}
 .seg button{padding:10px 8px;border-radius:12px;font-weight:700;font-size:14px;color:var(--dim)}
 .seg button:hover{color:var(--fg)}
 .seg button.on{background:var(--a1);color:var(--on-a1)}
+#eqSeg{grid-template-columns:repeat(4,1fr)}
 .thumbs{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:8px}
 .thumb{position:relative;aspect-ratio:16/10;border-radius:12px;background:center/cover rgb(var(--bg-rgb));overflow:hidden}
 .thumb button{position:absolute;top:4px;right:4px;width:24px;height:24px;border-radius:50%;background:rgba(0,0,0,.6);font-weight:800;opacity:0}
@@ -530,6 +531,9 @@ html.mobile button,html.mobile .song,html.mobile .pl{-webkit-tap-highlight-color
     <label class="chk pcOnly"><input type="checkbox" id="trayOn"><span></span>Крестик прячет Linea в трей, музыка играет дальше</label>
     <h4>Звук и клавиши</h4>
     <label class="field">Плавный переход между песнями<select id="xfSel"><option value="0">Выключен</option><option value="3">3 секунды</option><option value="6">6 секунд</option><option value="10">10 секунд</option></select></label>
+    <div class="field">Эквалайзер<div class="seg" id="eqSeg"><button data-eq="0">Обычный</button><button data-eq="1">Бас</button><button data-eq="2">Голос</button><button data-eq="3">Ночь</button></div></div>
+    <label class="chk"><input type="checkbox" id="normOn"><span></span>Выравнивать громкость песен</label>
+    <p class="small">Эквалайзер и выравнивание работают для своих файлов. SoundCloud и YouTube играют в своём плеере — до их звука не дотянуться.</p>
     <label class="chk pcOnly"><input type="checkbox" id="keysG"><span></span>Клавиши ← → (песни), PgDn (играть) и PgUp (стоп) работают везде, даже в других программах и играх</label>
     <div class="ovRow pcOnly"><label class="chk"><input type="checkbox" id="ovOn"><span></span>Слова поверх игр</label><button class="chipB" id="ovMove" hidden>Подвинуть</button></div>
     <label class="field">Стекло<select id="glassSel"><option value="liquid">Жидкое: преломляет фон, как линза</option><option value="plain">Обычное: размытое, легче для слабых компьютеров</option></select></label>
