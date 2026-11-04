@@ -27,16 +27,24 @@ const DB = (() => {
       const t = db.transaction(store, mode);
       const req = fn(t.objectStore(store));
       t.oncomplete = () => res(req && req.result);
-      t.onerror = () => rej(t.error);
+      // кончилось место — транзакция не «ошибается», а отменяется (abort): без onabort промис висел бы вечно
+      t.onerror = t.onabort = () => rej(t.error || (req && req.error) || new Error('запись отменена'));
     });
   };
   const api = (store) => ({
     all: () => tx(store, 'readonly', (s) => s.getAll()).catch((e) => { if (window.lnApp && window.lnApp.log) window.lnApp.log('база: не открылась ' + e); return []; }),
-    put: (v) => tx(store, 'readwrite', (s) => s.put(v)).catch((e) => { if (window.lnApp && window.lnApp.log) window.lnApp.log('база: не сохранилось ' + e); }),
+    put: (v) => tx(store, 'readwrite', (s) => s.put(v)).then(() => true, (e) => { if (window.lnApp && window.lnApp.log) window.lnApp.log('база: не сохранилось ' + e); dbFail(e); return false; }),
     del: (id) => tx(store, 'readwrite', (s) => s.delete(id)).catch(() => {}),
   });
   return Object.assign(api('songs'), { bgs: api('bgs') });
 })();
+// несохранённое пропадёт после перезапуска — говорим сразу; при импорте плейлиста ошибок может быть сотня, поэтому не чаще раза в 5 с
+let dbWarned = 0;
+function dbFail(e) {
+  if (Date.now() - dbWarned < 5000) return;
+  dbWarned = Date.now();
+  toast(e && e.name === 'QuotaExceededError' ? 'Не сохранилось: кончилось место на диске' : 'Не сохранилось в базу');
+}
 
 // ---------- теги mp3: название, исполнитель и обложка из ID3 ----------
 async function readTags(file) {
@@ -203,7 +211,7 @@ addEventListener('message', (e) => {
   if (!bridgeEl || e.source !== bridgeEl.contentWindow || !e.data || !e.data.linea) return;
   const m = e.data;
   if (m.ev === 'hello') { bridgeUp = true; const q = bridgeQ; bridgeQ = []; q.forEach(bridge); return; }
-  if (m.ev === 'list') { const w = listWait.get(m.req); if (w) { listWait.delete(m.req); w(m); } return; }
+  if (m.ev === 'list') { const w = listWait.get(m.req); if (w) w.done(m); return; }
   if (m.n !== openN) return; // событие от прошлой песни
   if (m.ev === 'time') {
     net.t = m.t; if (m.d) net.d = m.d;
@@ -227,8 +235,15 @@ function netMeta(m) {
   // у треков из плейлиста слова ищем, когда они впервые заиграли, а не все сразу
   if (!lyricsOf(s) && (ch || !s.lyrTried)) { s.lyrTried = true; findLyrics(s, true); }
 }
-// список треков плейлиста через невидимый плеер в мостике
-const netList = (kind, src) => new Promise((res) => { const req = ++listReq; listWait.set(req, res); bridge({ cmd: 'list', kind, src, req }); });
+// список треков плейлиста через невидимый плеер в мостике. Мостик перезапускается, когда закрыли окно сайта, —
+// тогда запрос шлётся заново (onBrowseClosed); а если мостик так и не ответил, экран загрузки не должен висеть вечно
+const netList = (kind, src) => new Promise((res) => {
+  const req = ++listReq, m = { cmd: 'list', kind, src, req };
+  const done = (r) => { clearTimeout(to); listWait.delete(req); res(r); };
+  const to = setTimeout(() => done({ items: [], err: 'Плеер не ответил. Проверь интернет и попробуй ещё раз' }), 60000);
+  listWait.set(req, { m, done });
+  bridge(m);
+});
 function setSrc(el, blob) {
   const old = deckUrl.get(el);
   if (old) URL.revokeObjectURL(old);
@@ -274,7 +289,7 @@ async function addFiles(list) {
     const vid = isVideoFile(file);
     const tags = vid ? { cover: await videoFrame(file) } : await readTags(file);
     const song = { id, name: tags.title || cleanName(file.name), artist: tags.artist || '', cover: tags.cover || null, blob: file, duration, added: Date.now() };
-    await DB.put(song);
+    if (!(await DB.put(song))) continue; // не легла в базу — не показываем, иначе после перезапуска пропадёт молча
     songs.unshift(song);
     if (plById(view)) plById(view).ids.push(song.id);
     added++;
@@ -387,6 +402,7 @@ if (window.lnApp && window.lnApp.onBrowseClosed) window.lnApp.onBrowseClosed(() 
   if (!bridgeEl || !bridgeUp) return;
   bridgeUp = false;
   bridgeEl.src = bridgeEl.src;
+  listWait.forEach((w) => bridge(w.m)); // старый мостик уже не ответит
   if (cur && cur.kind) net.open(cur, false);
 });
 // Ctrl+V со ссылкой в любом месте плеера — сразу добавить
@@ -441,7 +457,11 @@ async function feedFill() {
       const url = urls.splice(Math.floor(Math.random() * urls.length), 1)[0];
       // источник — плейлист SoundCloud или YouTube
       const p = parseNetUrl(url), kind = p && p.kind === 'yt' ? 'yt' : 'sc';
-      if (!feedLists.has(url)) feedLists.set(url, (await netList(kind, kind === 'yt' ? p.list : url)).items || []);
+      if (!feedLists.has(url)) {
+        const r = await netList(kind, kind === 'yt' ? p.list : url);
+        if (r.err) continue; // нет связи — не запоминаем источник пустым до «Новой ленты»
+        feedLists.set(url, r.items || []);
+      }
       const have = new Set([...songs, ...feed].map((x) => x.id).concat(batch.map(netId)));
       const pool = feedLists.get(url).map((it) => Object.assign({ kind }, it)).filter((it) => !have.has(netId(it)) && !seen.has(netId(it)));
       pool.sort(() => Math.random() - 0.5).sort((a, b) => !!b.title - !!a.title); // с названием — вперёд
@@ -678,7 +698,8 @@ function plMenu(p, x, y) {
   showMenu([
     { text: 'Играть', act: () => { const l = listOf(p.id); if (!l.length) return; view = ctx = p.id; renderPls(); renderSongs(); pushHist(); load(settings.shuffle ? l[Math.floor(Math.random() * l.length)] : l[0], true); } },
     { text: 'Переименовать', act: async () => { const n = await askName('Название плейлиста', p.name); if (n) { p.name = n.slice(0, 60); savePls(); renderPls(); } } },
-    { text: 'Удалить плейлист', bad: true, act: () => { playlists = playlists.filter((x) => x !== p); if (view === p.id) view = 'all'; if (ctx === p.id) ctx = 'all'; savePls(); renderPls(); renderSongs(); upText(); toast('Плейлист удалён, песни остались'); } },
+    // один промах мышью не должен стирать плейлист на сотни песен — переспрашиваем
+    { text: 'Удалить плейлист', bad: true, act: () => showMenu([{ label: `Удалить «${p.name}»?` }, { text: 'Удалить', bad: true, act: () => { playlists = playlists.filter((x) => x !== p); if (view === p.id) view = 'all'; if (ctx === p.id) ctx = 'all'; savePls(); renderPls(); renderSongs(); upText(); toast('Плейлист удалён, песни остались'); } }, { text: 'Отмена', act: () => {} }], x, y) },
   ], x, y);
 }
 
@@ -1361,6 +1382,9 @@ setInterval(() => { if (sleepAt) { if (Date.now() >= sleepAt) sleepStop(); else 
 // ==================== волна, скорость, режимы, сдвиг слов ====================
 let waveDirty = true, wavePx = -1;
 async function waveOf(song) {
+  // декодер держит в памяти всю песню в исходной частоте: часовой микс — около 2.7 ГБ, телефон от такого падает,
+  // и снова при каждом запуске, если микс играл последним. Волна — украшение, у длинных обойдёмся без неё
+  if (song.duration > 10 * 60000 || song.blob.size > 1e8) return;
   try {
     // 8 кГц моно хватает, чтобы увидеть громкость, и считается быстро
     const buf = await new OfflineAudioContext(1, 1, 8000).decodeAudioData(await song.blob.arrayBuffer());

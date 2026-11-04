@@ -39,6 +39,8 @@
     netFile: async (url) => {
       const r = await fetch(url);
       if (!r.ok) throw new Error(`Сервер ответил ${r.status}`);
+      // файл целиком ложится в память страницы: на огромном телефон падает (на ПК предел — 400 МБ в main.js)
+      if (Number(r.headers.get('content-length')) > 1.5e8) { r.body && r.body.cancel().catch(() => {}); throw new Error('Файл больше 150 МБ — для телефона слишком большой'); }
       const buf = await r.arrayBuffer();
       return { buf, type: r.headers.get('content-type') || '', name: decodeURIComponent(new URL(url).pathname.split('/').pop() || 'song.mp3') };
     },

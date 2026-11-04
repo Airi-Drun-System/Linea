@@ -1,5 +1,5 @@
 'use strict';
-const { app, BrowserWindow, ipcMain, net, globalShortcut, screen, Tray, Menu, nativeImage, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, net, globalShortcut, screen, Tray, Menu, nativeImage, shell, session } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -215,7 +215,7 @@ app.on('second-instance', () => {
   win.webContents.send('keys:step', 'already');
 });
 if (process.platform === 'win32') app.setAppUserModelId('com.vegasdev.linea');
-app.whenReady().then(() => { logLine('Linea запущен', app.getVersion(), process.platform, os.release()); createWindow(); makeTray(); setupUpdates(); });
+app.whenReady().then(() => { logLine('Linea запущен', app.getVersion(), process.platform, os.release()); lockPerms(); createWindow(); makeTray(); setupUpdates(); });
 // ==================== значок в трее ====================
 let tray = null, quitting = false;
 const prefs = { icon: 'grey', tray: true, trayTold: false };
@@ -304,6 +304,13 @@ ipcMain.handle('net:final', async (_e, url) => {
 // поиск прямо в Linea: сайт SoundCloud или YouTube в своём окне и кнопка «В Linea»
 const SITES = { sc: 'https://soundcloud.com/discover', yt: 'https://www.youtube.com/' };
 let browse = null;
+// в окне сайтов можно уйти по ссылкам куда угодно, а Electron без своих правил молча разрешает любому сайту микрофон,
+// камеру, геолокацию и запуск программ по ссылкам вида ms-…: или steam://. Плееру и сайтам нужны только полный экран и копирование ссылки
+const PERMS = new Set(['fullscreen', 'clipboard-sanitized-write', 'mediaKeySystem']); // mediaKeySystem — защищённое видео в плеере YouTube
+function lockPerms() {
+  session.defaultSession.setPermissionRequestHandler((_wc, perm, cb) => cb(PERMS.has(perm)));
+  session.defaultSession.setPermissionCheckHandler((_wc, perm) => PERMS.has(perm));
+}
 ipcMain.on('browse:open', (_e, site) => { if (SITES[site]) openBrowse(SITES[site]); });
 // окно сайтов — в той же сессии, что и плеер: вход в YouTube или SoundCloud здесь работает и для песен в Linea
 function openBrowse(url) {
