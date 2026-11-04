@@ -31,5 +31,18 @@ let g = fs.readFileSync(gf, 'utf8');
 const code = Number(process.env.LN_BUILD) || 1, name = process.env.LN_VERSION || '0.0.1';
 must(/versionCode \d+/.test(g) && /versionName "[^"]*"/.test(g), 'version');
 g = g.replace(/versionCode \d+/, `versionCode ${code}`).replace(/versionName "[^"]*"/, `versionName "${name}"`);
+// свой постоянный ключ подписи (путь из LN_KEYSTORE), чтобы новые APK вставали поверх старых
+must(g.includes('android {'), 'android {');
+g = g.replace('android {', `android {
+    signingConfigs {
+        debug {
+            if (System.getenv("LN_KEYSTORE")) {
+                storeFile file(System.getenv("LN_KEYSTORE"))
+                storePassword "android"
+                keyAlias "androiddebugkey"
+                keyPassword "android"
+            }
+        }
+    }`);
 fs.writeFileSync(gf, g);
 console.log('android пропатчен', code, name);
