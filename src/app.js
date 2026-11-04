@@ -1117,7 +1117,10 @@ $('seek').addEventListener('input', () => {
 $('seek').addEventListener('change', () => { if (audio.duration) audio.currentTime = $('seek').value / 1000 * audio.duration; seeking = false; });
 // список песен выезжает слева поверх плеера
 const libOpen = (on) => document.body.classList.toggle('lib', on);
-$('libBtn').addEventListener('click', () => libOpen(!document.body.classList.contains('lib')));
+const wide = () => matchMedia('(min-width:1200px)').matches;
+// в широком окне список закреплён, кнопка его прячет и показывает; в узком — выдвигает поверх
+$('libBtn').addEventListener('click', () => { if (wide()) { settings.libHide = document.body.classList.toggle('libHide'); saveSettings(); } else libOpen(!document.body.classList.contains('lib')); });
+document.body.classList.toggle('libHide', !!settings.libHide);
 $('libClose').addEventListener('click', () => libOpen(false));
 $('scrim').addEventListener('click', () => libOpen(false));
 $('songs').addEventListener('click', (e) => { if (e.target.closest('.song') && !e.target.closest('.del')) libOpen(false); });
