@@ -202,7 +202,8 @@ async function addFiles(list) {
     showLoading('Добавляю песни', file.name, k / list.length);
     const duration = await fileDuration(file);
     if (duration < 0) { toast(`Не получилось открыть ${file.name}`); continue; }
-    const tags = await readTags(file);
+    const vid = isVideoFile(file);
+    const tags = vid ? { cover: await videoFrame(file) } : await readTags(file);
     const song = { id, name: tags.title || cleanName(file.name), artist: tags.artist || '', cover: tags.cover || null, blob: file, duration, added: Date.now() };
     await DB.put(song);
     songs.unshift(song);
@@ -221,7 +222,7 @@ async function addFiles(list) {
 $('file').addEventListener('change', (e) => { addFiles([...e.target.files]); e.target.value = ''; });
 for (const ev of ['dragenter', 'dragover']) addEventListener(ev, (e) => { if (!e.dataTransfer.types.includes('Files')) return; e.preventDefault(); $('drop').classList.add('over'); });
 for (const ev of ['dragleave', 'drop']) addEventListener(ev, (e) => { e.preventDefault(); $('drop').classList.remove('over'); });
-addEventListener('drop', (e) => e.dataTransfer.types.includes('Files') && addFiles([...(e.dataTransfer?.files || [])].filter((x) => /^audio\//.test(x.type) || /\.(mp3|ogg|wav|flac|m4a|opus|aac)$/i.test(x.name))));
+addEventListener('drop', (e) => e.dataTransfer.types.includes('Files') && addFiles([...(e.dataTransfer?.files || [])].filter((x) => /^audio\//.test(x.type) || /^video\//.test(x.type) || /\.(mp3|ogg|wav|flac|m4a|opus|aac|mp4|webm|mov|mkv)$/i.test(x.name))));
 $('find').addEventListener('input', () => { query = $('find').value.trim().toLowerCase(); renderSongs(); });
 
 function renderSongs() {
@@ -399,6 +400,7 @@ function applyBg() {
   $('backdrop').classList.toggle('anim', !!BG.anim);
   clearInterval(bgTimer);
   const own = songBgUrl(cur);
+  if (bgVideo()) { bgShow(null); return; }
   if (BG.mode === 'gradient') bgShow(own);
   else if (own) bgShow(own);
   else if (BG.mode === 'images' && bgImgs.length) {
@@ -426,6 +428,7 @@ function renderBgDlg() {
   $('glassSel').value = settings.glass || 'liquid';
   $('xfSel').value = String(settings.xfade || 0);
   $('fxSel').value = settings.fx || 'snow';
+  $('vidBg').checked = settings.videoBg !== false;
   $('keysG').checked = settings.globalKeys !== false;
   $('ovOn').checked = !!settings.overlay;
   $('ovMove').hidden = !settings.overlay;
@@ -655,8 +658,10 @@ function setVolume(v) {
 // события слушаем у обеих дек, но реагируем только на текущую
 const onDeck = (ev, fn) => decks.forEach((d) => d.addEventListener(ev, (e) => { if (e.target === audio) fn(e); }));
 let xfading = false;
-onDeck('play', () => { $('play').querySelector('path').setAttribute('d', PATH.pause); $('play').ariaLabel = 'Пауза'; });
-onDeck('pause', () => { $('play').querySelector('path').setAttribute('d', PATH.play); $('play').ariaLabel = 'Играть'; });
+onDeck('play', () => { vSync(true);  $('play').querySelector('path').setAttribute('d', PATH.pause); $('play').ariaLabel = 'Пауза'; });
+onDeck('seeked', () => vSync(true));
+onDeck('ratechange', () => vSync(false));
+onDeck('pause', () => { vSync(false);  $('play').querySelector('path').setAttribute('d', PATH.play); $('play').ariaLabel = 'Играть'; });
 // за несколько секунд до конца начинаем следующую — получается переход без тишины
 onDeck('timeupdate', () => {
   if (!settings.xfade || settings.repeat || sync || xfading || !audio.duration || audio.paused) return;
@@ -1053,7 +1058,48 @@ function fxFrame(now) {
 }
 addEventListener('resize', fxResize);
 fxResize();
+$('vidBg').addEventListener('change', () => { settings.videoBg = $('vidBg').checked; saveSettings(); applyBg(); });
 $('fxSel').addEventListener('change', () => { settings.fx = $('fxSel').value; saveSettings(); });
+
+// ==================== mp4 как песня: звук играет плеер, видео — размытый фон ====================
+const isVideoFile = (f) => !!f && (/^video\//.test(f.type || '') || /\.(mp4|webm|mov|mkv)$/i.test(f.name || ''));
+// кадр из видео — обложка песни
+function videoFrame(file) {
+  return new Promise((res) => {
+    const v = document.createElement('video'), u = URL.createObjectURL(file);
+    const done = (b) => { clearTimeout(to); URL.revokeObjectURL(u); res(b || null); };
+    const to = setTimeout(() => done(null), 8000);
+    v.muted = true; v.preload = 'auto';
+    v.onloadeddata = () => { v.currentTime = Math.min((v.duration || 0) * 0.15, 20); };
+    v.onseeked = () => {
+      const c = document.createElement('canvas'), s = Math.min(v.videoWidth, v.videoHeight);
+      if (!s) { done(null); return; }
+      c.width = c.height = 512;
+      c.getContext('2d').drawImage(v, (v.videoWidth - s) / 2, (v.videoHeight - s) / 2, s, s, 0, 0, 512, 512);
+      c.toBlob((b) => done(b), 'image/jpeg', 0.85);
+    };
+    v.onerror = () => done(null);
+    v.src = u;
+  });
+}
+let vUrl = '';
+function bgVideo() {
+  const v = $('bgV'), on = !!cur && isVideoFile(cur.blob) && settings.videoBg !== false;
+  v.classList.toggle('show', on);
+  if (!on) { v.pause(); if (vUrl) { URL.revokeObjectURL(vUrl); vUrl = ''; v.removeAttribute('src'); v.dataset.id = ''; } return false; }
+  if (v.dataset.id !== cur.id) { if (vUrl) URL.revokeObjectURL(vUrl); vUrl = URL.createObjectURL(cur.blob); v.src = vUrl; v.dataset.id = cur.id; }
+  vSync(true);
+  return true;
+}
+// видео идёт за звуком: та же скорость, то же место, пауза вместе
+function vSync(force) {
+  const v = $('bgV');
+  if (!v.classList.contains('show')) return;
+  v.playbackRate = audio.playbackRate;
+  if (force || Math.abs(v.currentTime - audio.currentTime) > 0.3) { try { v.currentTime = audio.currentTime; } catch { /* ещё не загрузилось */ } }
+  if (audio.paused) v.pause(); else v.play().catch(() => {});
+}
+setInterval(() => vSync(false), 1000);
 // ==================== кадр: перемотка, бас, строка ====================
 function frame(now) {
   requestAnimationFrame(frame);

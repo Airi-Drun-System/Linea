@@ -55,6 +55,8 @@ kbd{font:700 12px var(--ui);background:var(--glass-2);border:1px solid var(--lin
 .backdrop.grad-on .grad{opacity:.9}
 .backdrop.grad-on.anim .grad{animation:drift 26s ease-in-out infinite alternate}
 @keyframes drift{0%{transform:rotate(0) scale(1)}33%{transform:rotate(25deg) scale(1.15) translate(4%,-3%)}66%{transform:rotate(-15deg) scale(1.05) translate(-5%,4%)}100%{transform:rotate(40deg) scale(1.2)}}
+#bgV{position:absolute;inset:-6%;width:112%;height:112%;object-fit:cover;filter:blur(calc(var(--bg-blur,70px) * .45)) saturate(1.2) brightness(var(--bg-bright,1));opacity:0;transition:opacity 1s var(--ease)}
+#bgV.show{opacity:.75}
 #fx{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 /* затемнение: на ударах баса чуть расступается — фон «дышит» */
 .backdrop .shade{position:absolute;inset:0;opacity:calc(1 - var(--kick) * var(--bg-react,.45));background:radial-gradient(120% 90% at 30% 40%,transparent 0,rgba(9,9,13,.5) 58%,rgba(9,9,13,.9) 100%),rgba(9,9,13,var(--bg-dim,.25))}
@@ -295,14 +297,14 @@ body.liquid .over{backdrop-filter:blur(6px);background:rgba(6,6,9,.35)}
 </style>
 </head>
 <body>
-<div class="backdrop" id="backdrop" aria-hidden="true"><div class="grad"></div><div class="img" id="bgA"></div><div class="img" id="bgB"></div><div class="shade"></div><canvas id="fx"></canvas></div>
+<div class="backdrop" id="backdrop" aria-hidden="true"><div class="grad"></div><div class="img" id="bgA"></div><div class="img" id="bgB"></div><video id="bgV" muted playsinline preload="auto"></video><div class="shade"></div><canvas id="fx"></canvas></div>
 
 <aside class="side" id="side" aria-label="Мои песни">
   <div class="sideTop"><b>Мои песни</b><button class="x" id="libClose" aria-label="Закрыть">×</button></div>
   <label class="add" id="drop">
-      <input type="file" id="file" accept="audio/*,.mp3,.ogg,.wav,.flac,.m4a" multiple>
+      <input type="file" id="file" accept="audio/*,video/*,.mp3,.ogg,.wav,.flac,.m4a,.mp4,.webm,.mov,.mkv" multiple>
       <span class="plus">+</span>
-      <span><b>Добавить песни</b><small>mp3, flac, wav: перетащи или нажми</small></span>
+      <span><b>Добавить песни</b><small>mp3, flac, wav или видео mp4: перетащи или нажми</small></span>
     </label>
   <div class="plHead"><b>Плейлисты</b><button class="mini" id="plNew" title="Новый плейлист" aria-label="Новый плейлист">+</button></div>
   <div class="pls" id="pls"></div>
@@ -391,6 +393,7 @@ body.liquid .over{backdrop-filter:blur(6px);background:rgba(6,6,9,.35)}
       <div class="cols"><input type="color" id="g1" aria-label="Цвет 1"><input type="color" id="g2" aria-label="Цвет 2"><input type="color" id="g3" aria-label="Цвет 3"><button class="chipB" id="gAuto">Цвета из обложки</button></div>
       <label class="chk"><input type="checkbox" id="gAnim"><span></span>Переливается</label>
     </div>
+    <label class="chk"><input type="checkbox" id="vidBg"><span></span>Видео песни на фоне (для mp4)</label>
     <label class="field">Частицы на фоне<select id="fxSel"><option value="snow">Снег</option><option value="dust">Светящиеся пылинки</option><option value="off">Без частиц</option></select></label>
     <label class="rng"><span>Размытие <b id="bgBlurV"></b></span><input type="range" id="bgBlur" min="0" max="120" step="2"></label>
     <label class="rng"><span>Затемнение <b id="bgDimV"></b></span><input type="range" id="bgDim" min="0" max="0.9" step="0.05"></label>
