@@ -213,6 +213,8 @@ addEventListener('message', (e) => {
   else if (m.ev === 'ended') { net.paused = true; net.fire('ended'); }
   else if (m.ev === 'error') { net.err = m.msg; net.paused = true; net.fire('error'); net.fire('pause'); }
   else if (m.ev === 'meta') netMeta(m);
+  // плеер в мостике действительно встал: теперь можно гасить и беззвучную деку (см. keepSync)
+  if (m.ev === 'pause' || m.ev === 'ended' || m.ev === 'error') keepSync(true);
 });
 // узнали длину (и название, если его не было) только когда трек заиграл
 function netMeta(m) {
@@ -221,7 +223,7 @@ function netMeta(m) {
   let ch = false;
   if (m.d && Math.abs(s.duration - m.d * 1000) > 1500) { s.duration = Math.round(m.d * 1000); ch = true; $('dur').textContent = fmtDur(s.duration); }
   if (s.noName && m.title) { Object.assign(s, splitTitle(m.title, m.artist)); delete s.noName; ch = true; showSong(); }
-  if (ch) { saveSong(s); renderSongs(); }
+  if (ch) { saveSong(s); renderSongs(); msPush(); }
   // у треков из плейлиста слова ищем, когда они впервые заиграли, а не все сразу
   if (!lyricsOf(s) && (ch || !s.lyrTried)) { s.lyrTried = true; findLyrics(s, true); }
 }
@@ -971,10 +973,9 @@ async function load(song, autoplay) {
   applyPalette(song);
   waveDirty = true;
   $('coverImg').src = song.imgUrl;
-  mediaPush(); // теперь есть обложка
+  mediaPush(); // теперь есть обложка (и у плашки Windows тоже)
   applyBg();
   applyTx();
-  if (window.MediaMetadata) navigator.mediaSession.metadata = new MediaMetadata({ title: song.name, artist: song.artist || '', artwork: [{ src: song.imgUrl }] });
 }
 // история прослушанного: «назад» возвращает к тому, что реально играло, и в перемешке тоже
 const hist = [];
@@ -1002,12 +1003,54 @@ function setVolume(v) {
 }
 // события слушаем у обеих дек, но реагируем только на текущую
 // телефон: уведомление с названием и кнопками, пока играет музыка
-const mediaPush = () => { if (cur && window.lnApp && window.lnApp.media) window.lnApp.media({ id: cur.id, title: cur.name, artist: cur.artist || '', playing: !audio.paused, pos: audio.currentTime || 0, dur: audio.duration || cur.duration / 1000 || 0, img: cur.img }); };
+const mediaPush = () => { if (cur && window.lnApp && window.lnApp.media) window.lnApp.media({ id: cur.id, title: cur.name, artist: cur.artist || '', playing: !audio.paused, pos: audio.currentTime || 0, dur: audio.duration || cur.duration / 1000 || 0, img: cur.img }); msPush(); };
+// ПК: плашка Windows (SMTC), «динамический остров» и медиаклавиши берут название, обложку, время и кнопки из navigator.mediaSession
+let msKey = '', keep = null, keepT = 0;
+function msPush() {
+  const ms = navigator.mediaSession;
+  if (!ms) return;
+  keepSync();
+  if (!cur) return;
+  const key = [cur.id, cur.name, cur.artist, cur.imgUrl].join('\n');
+  if (key !== msKey && window.MediaMetadata) { msKey = key; ms.metadata = new MediaMetadata({ title: cur.name, artist: cur.artist || '', artwork: cur.imgUrl ? [{ src: cur.imgUrl }] : [] }); }
+  ms.playbackState = audio.paused ? 'paused' : 'playing';
+  const dur = audio.duration > 0 && isFinite(audio.duration) ? audio.duration : (cur.duration || 0) / 1000;
+  try {
+    if (dur > 0) ms.setPositionState({ duration: dur, playbackRate: audio.playbackRate || 1, position: Math.min(dur, Math.max(0, audio.currentTime || 0)) });
+    else ms.setPositionState(); // длина ещё неизвестна
+  } catch { /* не поддерживается */ }
+}
+// треки SoundCloud и YouTube звучат в iframe-мостике, а у главного окна своего играющего медиа нет, и тогда Chromium
+// не отдаёт Windows его navigator.mediaSession. Поэтому, пока играет мостик, здесь крутится зацикленная тишина.
+// Громкость 0 не годится (такую деку Chromium не считает играющей), тишина — в самих данных. Длина больше 5 секунд,
+// иначе для Chromium это короткий звук, и плашка им не управляет
+function silentWav(sec) {
+  const rate = 8000, n = rate * sec * 2, v = new DataView(new ArrayBuffer(44 + n)); // 16 бит, моно, все отсчёты нулевые
+  const tag = (o, s) => { for (let i = 0; i < 4; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+  tag(0, 'RIFF'); v.setUint32(4, 36 + n, true); tag(8, 'WAVE');
+  tag(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, rate, true); v.setUint32(28, rate * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+  tag(36, 'data'); v.setUint32(40, n, true);
+  return new Blob([v.buffer], { type: 'audio/wav' });
+}
+function keepSync(soon) {
+  if (!window.lnApp || window.lnApp.mobile) return; // на телефоне шторкой занимается плагин
+  if (audio === net && !net.paused) {
+    clearTimeout(keepT); keepT = 0;
+    if (!keep) { keep = new Audio(URL.createObjectURL(silentWav(10))); keep.loop = true; keep.addEventListener('timeupdate', () => keepSync()); }
+    if (keep.paused) keep.play().catch(() => {});
+  } else if (keep && !keep.paused && (soon || !keepT)) {
+    // гасим после плеера в мостике: на паузе Chromium выкидывает из сессии того, кто встал не последним,
+    // а остаться в ней (с названием и кнопками) должна эта дека. soon — мостик уже сказал, что встал
+    clearTimeout(keepT);
+    keepT = setTimeout(() => { keepT = 0; if (audio !== net || net.paused) keep.pause(); }, soon ? 250 : 1500);
+  }
+}
 const onDeck = (ev, fn) => [...decks, net].forEach((d) => d.addEventListener(ev, (e) => { if (e.target === audio) fn(e); }));
 let xfading = false;
 onDeck('play', () => { vSync(true); mediaPush();  $('play').querySelector('path').setAttribute('d', PATH.pause); $('play').ariaLabel = 'Пауза'; });
 onDeck('seeked', () => { vSync(true); mediaPush(); });
-onDeck('ratechange', () => vSync(false));
+onDeck('ratechange', () => { vSync(false); msPush(); });
 onDeck('pause', () => { vSync(false); mediaPush();  $('play').querySelector('path').setAttribute('d', PATH.play); $('play').ariaLabel = 'Играть'; });
 // за несколько секунд до конца начинаем следующую — получается переход без тишины
 onDeck('timeupdate', () => {
@@ -1022,9 +1065,12 @@ onDeck('ended', () => {
   if (sync.i) { sync.lines.length = sync.i; syncDone(true); } else syncDone(false);
 });
 onDeck('error', () => { if (cur) toast(audio === net ? net.err || 'Трек не играет' : 'Этот файл не играет. Попробуй mp3.'); });
-// медиа-клавиши клавиатуры и наушников: работают и в свёрнутом окне
+onDeck('ended', () => msPush()); // после следующей, повтора или таймера сна система должна знать, играет ли что-то
+// медиа-клавиши клавиатуры и наушников, кнопки плашки Windows: работают и в свёрнутом окне.
+// play без аргументов: иначе объект действия попадёт в fadeIn
 if ('mediaSession' in navigator) {
-  for (const [a, f] of [['play', play], ['pause', () => audio.pause()], ['previoustrack', () => step(-1)], ['nexttrack', () => step(1)]]) {
+  for (const [a, f] of [['play', () => play()], ['pause', () => audio.pause()], ['previoustrack', () => step(-1)], ['nexttrack', () => step(1)],
+    ['seekto', (d) => { if (audio.duration && d.seekTime >= 0) audio.currentTime = Math.min(d.seekTime, audio.duration); }]]) {
     try { navigator.mediaSession.setActionHandler(a, f); } catch { /* нет такой кнопки */ }
   }
 }
