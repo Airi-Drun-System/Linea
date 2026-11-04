@@ -428,6 +428,11 @@ function renderBgDlg() {
   $('glassSel').value = settings.glass || 'liquid';
   $('xfSel').value = String(settings.xfade || 0);
   $('fxSel').value = settings.fx || 'snow';
+  document.querySelectorAll('.icoB').forEach((b) => b.classList.toggle('on', b.dataset.ico === (settings.icon || 'grey')));
+  $('accAuto').classList.toggle('on', !settings.accent);
+  $('accCol').value = settings.accent || (cur && cur.pal ? cur.pal[0] : '#d4d4da');
+  $('lyrSize').value = settings.lyrScale || 1; $('lyrSizeV').textContent = Math.round((settings.lyrScale || 1) * 100) + '%';
+  $('trayOn').checked = settings.tray !== false;
   $('vidBg').checked = settings.videoBg !== false;
   $('keysG').checked = settings.globalKeys !== false;
   $('ovOn').checked = !!settings.overlay;
@@ -583,7 +588,8 @@ function fadeOut(d) {
 }
 const toggle = () => (audio.paused ? play() : audio.pause());
 function applyPalette(song) {
-  const c = song.pal || paletteOfId(song.id), r = document.documentElement.style;
+  const c = (song.pal || paletteOfId(song.id)).slice(), r = document.documentElement.style;
+  if (settings.accent) c[0] = settings.accent;
   r.setProperty('--a1', c[0]); r.setProperty('--a2', c[1]); r.setProperty('--a3', c[2]);
   const n = parseInt(c[0].slice(1), 16), lum = (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255;
   r.setProperty('--on-a1', lum > 0.62 ? '#16070C' : '#FFFFFF');
@@ -592,7 +598,7 @@ function showSong() {
   const meta = $('meta');
   meta.classList.remove('swap'); void meta.offsetWidth; meta.classList.add('swap');
   $('title').textContent = cur ? cur.name : 'Linea';
-  if (!cur) $('coverImg').src = 'cube.png'; // пока песен нет — на месте обложки куб
+  if (!cur) $('coverImg').src = `icons/${settings.icon || 'grey'}.png`; // пока песен нет — на месте обложки куб
   $('artist').textContent = cur ? cur.artist || 'Неизвестный исполнитель' : 'Добавь песни слева';
   $('dur').textContent = fmtDur(cur ? cur.duration : 0);
   document.title = cur ? `${cur.name} — Linea` : 'Linea';
@@ -932,7 +938,7 @@ async function setGlobalKeys(on, quiet) {
   const ok = await window.lnApp.globalKeys(on);
   if (on && !ok && !quiet) toast('Стрелки уже заняты другой программой');
 }
-if (window.lnApp && window.lnApp.onStep) window.lnApp.onStep((d) => (d === 'already' ? toast('Linea уже открыта — вот она') : d === 'play' ? play() : d === 'pause' ? audio.pause() : step(d)));
+if (window.lnApp && window.lnApp.onStep) window.lnApp.onStep((d) => (d === 'trayTold' ? (settings.trayTold = true, saveSettings()) : d === 'already' ? toast('Linea уже открыта — вот она') : d === 'play' ? play() : d === 'pause' ? audio.pause() : step(d)));
 
 let ovMove = false, ovLast = '';
 function ovApply() { if (window.lnApp && window.lnApp.overlay) window.lnApp.overlay({ on: !!settings.overlay, move: ovMove }); }
@@ -1100,6 +1106,21 @@ function vSync(force) {
   if (audio.paused) v.pause(); else v.play().catch(() => {});
 }
 setInterval(() => vSync(false), 1000);
+
+// ==================== вид: иконка, свой цвет, размер слов, трей ====================
+function applyLook() {
+  const ic = `icons/${settings.icon || 'grey'}.png`;
+  document.querySelector('.brandBtn img').src = ic;
+  if (!cur) $('coverImg').src = ic;
+  document.documentElement.style.setProperty('--lyr-scale', settings.lyrScale || 1);
+  if (window.lnApp && window.lnApp.prefs) window.lnApp.prefs({ icon: settings.icon || 'grey', tray: settings.tray !== false, trayTold: !!settings.trayTold });
+}
+document.querySelectorAll('.icoB').forEach((b) => b.addEventListener('click', () => { settings.icon = b.dataset.ico; saveSettings(); applyLook(); renderBgDlg(); }));
+$('accAuto').addEventListener('click', () => { settings.accent = null; saveSettings(); if (cur) applyPalette(cur); waveDirty = true; renderBgDlg(); });
+$('accCol').addEventListener('input', () => { settings.accent = $('accCol').value; saveSettings(); if (cur) applyPalette(cur); else document.documentElement.style.setProperty('--a1', settings.accent); waveDirty = true; $('accAuto').classList.remove('on'); });
+$('lyrSize').addEventListener('input', () => { settings.lyrScale = Number($('lyrSize').value); saveSettings(); $('lyrSizeV').textContent = Math.round(settings.lyrScale * 100) + '%'; applyLook(); lineIdx = -2; });
+$('trayOn').addEventListener('change', () => { settings.tray = $('trayOn').checked; saveSettings(); applyLook(); });
+applyLook();
 // ==================== кадр: перемотка, бас, строка ====================
 function frame(now) {
   requestAnimationFrame(frame);

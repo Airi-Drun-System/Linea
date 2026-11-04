@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld('lnApp', {
   findLyrics: (q) => ipcRenderer.invoke('lyrics:find', q),
   log: (m) => ipcRenderer.send('log', m),
   win: (a) => ipcRenderer.send('win:act', a),
+  prefs: (q) => ipcRenderer.send('app:prefs', q),
   globalKeys: (on) => ipcRenderer.invoke('keys:global', on),
   onStep: (fn) => ipcRenderer.on('keys:step', (_e, d) => fn(d)),
   overlay: (q) => ipcRenderer.invoke('overlay:set', q),

@@ -1,5 +1,5 @@
 'use strict';
-const { app, BrowserWindow, ipcMain, net, globalShortcut, screen } = require('electron');
+const { app, BrowserWindow, ipcMain, net, globalShortcut, screen, Tray, Menu, nativeImage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -36,6 +36,14 @@ function createWindow() {
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   win.webContents.on('will-navigate', (e) => e.preventDefault());
   win.loadFile(path.join(__dirname, 'src', 'index.html'));
+  // крестик прячет в трей (музыка играет дальше); совсем выйти — через значок в трее
+  win.on('close', (e) => {
+    if (quitting || !prefs.tray) return;
+    e.preventDefault();
+    win.hide();
+    if (!prefs.trayTold && tray) { tray.displayBalloon({ title: 'Linea играет в трее', content: 'Чтобы выйти совсем: правый клик по значку → «Выйти из Linea».' }); prefs.trayTold = true; win.webContents.send('keys:step', 'trayTold'); }
+  });
+  win.on('closed', () => { win = null; app.quit(); }); // окно закрылось — закрываем и оверлей, фоновых процессов не остаётся
 }
 
 // слова с таймингами: бесплатная база lrclib.net, без ключей
@@ -211,10 +219,45 @@ ipcMain.handle('sep:ready', () => fs.existsSync(SEP_FILE()));
 if (!app.requestSingleInstanceLock()) app.quit();
 app.on('second-instance', () => {
   if (!win || win.isDestroyed()) return;
-  if (win.isMinimized()) win.restore();
-  win.show(); win.focus();
+  showWin();
   win.webContents.send('keys:step', 'already');
 });
-app.whenReady().then(() => { logLine('Linea запущен', app.getVersion(), process.platform, os.release()); createWindow(); });
+app.whenReady().then(() => { logLine('Linea запущен', app.getVersion(), process.platform, os.release()); createWindow(); makeTray(); });
+// ==================== значок в трее ====================
+let tray = null, quitting = false;
+const prefs = { icon: 'grey', tray: true, trayTold: false };
+const iconPath = (n) => path.join(__dirname, 'src', 'icons', `${/^[a-z]+$/.test(n) ? n : 'grey'}.png`);
+function showWin() { if (!win) return; if (win.isMinimized()) win.restore(); win.show(); win.focus(); }
+function quitAll() { quitting = true; app.quit(); }
+function makeTray() {
+  if (tray) return;
+  tray = new Tray(nativeImage.createFromPath(iconPath(prefs.icon)).resize({ width: 32, height: 32 }));
+  tray.setToolTip('Linea');
+  const send = (v) => () => { if (win) win.webContents.send('keys:step', v); };
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: 'Открыть Linea', click: showWin },
+    { type: 'separator' },
+    { label: 'Играть', click: send('play') },
+    { label: 'Пауза', click: send('pause') },
+    { label: 'Следующая', click: send(1) },
+    { label: 'Предыдущая', click: send(-1) },
+    { type: 'separator' },
+    { label: 'Выйти из Linea', click: quitAll },
+  ]));
+  tray.on('click', showWin);
+}
+// плеер сообщает выбор иконки и поведение крестика
+ipcMain.on('app:prefs', (_e, q) => {
+  if (!q) return;
+  if (typeof q.tray === 'boolean') prefs.tray = q.tray;
+  if (typeof q.trayTold === 'boolean') prefs.trayTold = q.trayTold;
+  if (typeof q.icon === 'string' && /^[a-z]+$/.test(q.icon)) {
+    prefs.icon = q.icon;
+    const img = nativeImage.createFromPath(iconPath(q.icon));
+    if (win && !img.isEmpty()) win.setIcon(img);
+    if (tray && !img.isEmpty()) tray.setImage(img.resize({ width: 32, height: 32 }));
+  }
+});
+app.on('before-quit', () => { quitting = true; });
 app.on('will-quit', () => globalShortcut.unregisterAll());
 app.on('window-all-closed', () => app.quit());

@@ -126,7 +126,7 @@ body.lib .scrim{opacity:1;pointer-events:auto}
 .seek{width:min(640px,100%)}
 .cover{position:relative;aspect-ratio:1;border-radius:24px;overflow:hidden;background:#17171b;transform:scale(calc(1 + var(--kick)*.035));box-shadow:0 24px 70px rgba(0,0,0,.45)}
 .cover img{width:100%;height:100%;object-fit:cover;display:block}
-.cover img[src="cube.png"]{object-fit:contain;padding:18%;box-sizing:border-box}
+.cover img[src^="icons/"]{object-fit:contain;padding:18%;box-sizing:border-box}
 .meta.swap>*{animation:rise .6s var(--ease) both}
 .meta.swap>:nth-child(2){animation-delay:.05s}
 .meta h1{font:clamp(24px,2.6vw,36px)/1.08 var(--display);letter-spacing:-.02em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -151,7 +151,7 @@ input[type=range]:hover::-webkit-slider-thumb{transform:scale(1.25)}
 /* ---------- слова: караоке ---------- */
 .lyr{position:relative;height:100%;min-height:0;overflow:hidden;-webkit-mask-image:linear-gradient(transparent,#000 22%,#000 70%,transparent);mask-image:linear-gradient(transparent,#000 22%,#000 70%,transparent)}
 .lines{position:absolute;left:0;right:0;top:44%;display:flex;flex-direction:column;gap:clamp(10px,1.6vh,20px);transition:transform .7s var(--ease)}
-.ln{font:800 clamp(22px,2.7vw,42px)/1.18 var(--ui);letter-spacing:-.015em;color:rgba(246,245,250,.28);text-wrap:balance;cursor:pointer;transform-origin:center;text-align:center;transition:color .4s,filter .5s,transform .6s var(--ease);filter:blur(1.5px)}
+.ln{font:800 calc(clamp(22px,2.7vw,42px) * var(--lyr-scale,1))/1.18 var(--ui);letter-spacing:-.015em;color:rgba(246,245,250,.28);text-wrap:balance;cursor:pointer;transform-origin:center;text-align:center;transition:color .4s,filter .5s,transform .6s var(--ease);filter:blur(1.5px)}
 .ln:hover{color:rgba(246,245,250,.55);filter:none}
 .ln.past{color:rgba(246,245,250,.4)}
 .ln.on{filter:none;transform:scale(1.04);color:transparent;background:linear-gradient(90deg,#fff calc(var(--p,0)*100%),rgba(255,255,255,.42) calc(var(--p,0)*100% + 8%));-webkit-background-clip:text;background-clip:text}
@@ -254,7 +254,7 @@ input[type=range]:hover::-webkit-slider-thumb{transform:scale(1.25)}
 .chipB.on{background:var(--a1);color:var(--on-a1)}
 .chk{display:flex;align-items:center;gap:10px;font-weight:700;cursor:pointer}
 .chk input{position:absolute;opacity:0}
-.chk span{width:40px;height:24px;border-radius:99px;background:rgba(255,255,255,.14);position:relative;transition:background .25s}
+.chk span{flex:none;width:40px;height:24px;border-radius:99px;background:rgba(255,255,255,.14);position:relative;transition:background .25s}
 .chk span::after{content:"";position:absolute;left:3px;top:3px;width:18px;height:18px;border-radius:50%;background:#fff;transition:transform .3s var(--spring)}
 .chk input:checked+span{background:var(--a1)}
 .chk input:checked+span::after{transform:translateX(16px)}
@@ -273,6 +273,12 @@ body.liquid .over{backdrop-filter:blur(6px);background:rgba(6,6,9,.35)}
 .offs{display:inline-flex}
 .ovRow{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .mode.kar{padding:0 12px}
+
+.icos{display:flex;flex-wrap:wrap;gap:8px}
+.icoB{width:52px;height:52px;border-radius:14px;padding:4px;background:rgba(255,255,255,.05);border:2px solid transparent}
+.icoB img{width:100%;height:100%;object-fit:contain}
+.icoB:hover{background:rgba(255,255,255,.1)}
+.icoB.on{border-color:var(--a1)}
 
 /* окна */
 .over{position:fixed;inset:0;display:grid;place-items:center;padding:16px;background:rgba(6,6,9,.6);backdrop-filter:blur(14px);animation:fade .25s both;z-index:5}
@@ -400,7 +406,12 @@ body.liquid .over{backdrop-filter:blur(6px);background:rgba(6,6,9,.35)}
     <label class="rng"><span>Яркость <b id="bgBrightV"></b></span><input type="range" id="bgBright" min="0.5" max="1.5" step="0.05"></label>
     <label class="chk"><input type="checkbox" id="bgReact"><span></span>Фон дышит под бас</label>
     <div class="acts"><button id="bgSong">Своя картинка для этой песни</button></div>
-    <h4>Вид и звук</h4>
+    <h4>Вид</h4>
+    <div class="field pcOnly">Иконка Linea<div class="icos" id="icos"><button class="icoB" data-ico="grey" title="Серый"><img src="icons/grey.png" alt="Серый"></button><button class="icoB" data-ico="white" title="Белый"><img src="icons/white.png" alt="Белый"></button><button class="icoB" data-ico="ice" title="Лёд"><img src="icons/ice.png" alt="Лёд"></button><button class="icoB" data-ico="lime" title="Лайм"><img src="icons/lime.png" alt="Лайм"></button><button class="icoB" data-ico="sunset" title="Закат"><img src="icons/sunset.png" alt="Закат"></button><button class="icoB" data-ico="red" title="Красный"><img src="icons/red.png" alt="Красный"></button><button class="icoB" data-ico="gold" title="Золото"><img src="icons/gold.png" alt="Золото"></button></div></div>
+    <div class="ovRow"><span>Цвет кнопок и волны</span><span class="cols"><button class="chipB" id="accAuto">Из обложки</button><input type="color" id="accCol" aria-label="Свой цвет"></span></div>
+    <label class="rng"><span>Размер слов <b id="lyrSizeV"></b></span><input type="range" id="lyrSize" min="0.7" max="1.5" step="0.05"></label>
+    <label class="chk pcOnly"><input type="checkbox" id="trayOn"><span></span>Крестик прячет Linea в трей, музыка играет дальше</label>
+    <h4>Звук и клавиши</h4>
     <label class="field">Плавный переход между песнями<select id="xfSel"><option value="0">Выключен</option><option value="3">3 секунды</option><option value="6">6 секунд</option><option value="10">10 секунд</option></select></label>
     <label class="chk pcOnly"><input type="checkbox" id="keysG"><span></span>Клавиши ← → (песни), PgDn (играть) и PgUp (стоп) работают везде, даже в других программах и играх</label>
     <div class="ovRow pcOnly"><label class="chk"><input type="checkbox" id="ovOn"><span></span>Слова поверх игр</label><button class="chipB" id="ovMove" hidden>Подвинуть</button></div>
