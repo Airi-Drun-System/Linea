@@ -30,8 +30,8 @@ const DB = (() => {
     });
   };
   const api = (store) => ({
-    all: () => tx(store, 'readonly', (s) => s.getAll()).catch(() => []),
-    put: (v) => tx(store, 'readwrite', (s) => s.put(v)).catch(() => {}),
+    all: () => tx(store, 'readonly', (s) => s.getAll()).catch((e) => { if (window.lnApp && window.lnApp.log) window.lnApp.log('база: не открылась ' + e); return []; }),
+    put: (v) => tx(store, 'readwrite', (s) => s.put(v)).catch((e) => { if (window.lnApp && window.lnApp.log) window.lnApp.log('база: не сохранилось ' + e); }),
     del: (id) => tx(store, 'readwrite', (s) => s.delete(id)).catch(() => {}),
   });
   return Object.assign(api('songs'), { bgs: api('bgs') });
@@ -932,7 +932,7 @@ async function setGlobalKeys(on, quiet) {
   const ok = await window.lnApp.globalKeys(on);
   if (on && !ok && !quiet) toast('Стрелки уже заняты другой программой');
 }
-if (window.lnApp && window.lnApp.onStep) window.lnApp.onStep((d) => (d === 'play' ? play() : d === 'pause' ? audio.pause() : step(d)));
+if (window.lnApp && window.lnApp.onStep) window.lnApp.onStep((d) => (d === 'already' ? toast('Linea уже открыта — вот она') : d === 'play' ? play() : d === 'pause' ? audio.pause() : step(d)));
 
 let ovMove = false, ovLast = '';
 function ovApply() { if (window.lnApp && window.lnApp.overlay) window.lnApp.overlay({ on: !!settings.overlay, move: ovMove }); }

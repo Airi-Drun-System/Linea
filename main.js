@@ -206,6 +206,15 @@ ipcMain.handle('sep:run', async (e, q) => {
 ipcMain.handle('sep:cancel', () => { if (!sepJob) return; sepJob.ctrl.abort(); if (sepJob.worker) sepJob.worker.terminate(); });
 ipcMain.handle('sep:ready', () => fs.existsSync(SEP_FILE()));
 
+// только одна Linea за раз: две копии делят одну базу песен, и вторая её не видит —
+// поэтому при втором запуске просто показываем уже открытое окно
+if (!app.requestSingleInstanceLock()) app.quit();
+app.on('second-instance', () => {
+  if (!win || win.isDestroyed()) return;
+  if (win.isMinimized()) win.restore();
+  win.show(); win.focus();
+  win.webContents.send('keys:step', 'already');
+});
 app.whenReady().then(() => { logLine('Linea запущен', app.getVersion(), process.platform, os.release()); createWindow(); });
 app.on('will-quit', () => globalShortcut.unregisterAll());
 app.on('window-all-closed', () => app.quit());
