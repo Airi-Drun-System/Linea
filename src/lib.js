@@ -53,6 +53,83 @@ function peaks(data, n) {
   const max = Math.max(...out) || 1;
   return out.map((v) => Math.round((v / max) * 100) / 100);
 }
+// авторазметка, шаг 1: огибающая голоса кадрами по 50 мс в полосе 300–3400 Гц. Берём среднее L·R, а не громкость:
+// голос обычно посередине, а широкие гитары, подклады и хвосты эха в каналах разные и в произведении гасятся
+function voiceEnv(L, R, rate) {
+  const band = (x) => {
+    const y = new Float32Array(x);
+    for (const [f0, hp] of [[300, 1], [300, 1], [3400, 0]]) {
+      const w = (2 * Math.PI * f0) / rate, c = Math.cos(w), al = Math.sin(w) / Math.SQRT2;
+      const k = (hp ? 1 + c : 1 - c) / 2 / (1 + al), b1 = hp ? -2 * k : 2 * k, a1 = (-2 * c) / (1 + al), a2 = (1 - al) / (1 + al);
+      let x1 = 0, x2 = 0, y1 = 0, y2 = 0;
+      for (let i = 0; i < y.length; i++) { const v = k * (y[i] + x2) + b1 * x1 - a1 * y1 - a2 * y2; x2 = x1; x1 = y[i]; y2 = y1; y1 = y[i] = v; }
+    }
+    return y;
+  };
+  const a = band(L), b = R ? band(R) : a, n = Math.round(rate / 20), env = new Float32Array(Math.floor(a.length / n));
+  for (let f = 0; f < env.length; f++) {
+    let s = 0;
+    for (let i = f * n; i < (f + 1) * n; i++) s += a[i] * b[i];
+    env[f] = Math.sqrt(Math.max(0, s / n));
+  }
+  return env;
+}
+// шаг 2: строки текста встают туда, где поют. Время без голоса (вступление, паузы) выкидываем, остальное делим
+// между строками: длина строки — по числу слогов, начало — лучше сразу после паузы. Лучшую раскладку ищем перебором
+// с запоминанием (для каждой строки и каждого возможного начала — цена лучшей раскладки всего, что до неё)
+function autoLyrics(env, plain) {
+  const lines = String(plain || '').split(/\r?\n/).map((x) => x.trim()).filter((x) => x && !/^\[.*\]$/.test(x)); // [Припев] не поют
+  const n = lines.length, F = env.length;
+  if (!n) return [];
+  const db = Array.from(env, (v) => 20 * Math.log10(v + 1e-6)), q = [...db].sort((x, y) => x - y);
+  // фраза — громче середины между тихим и громким. В паузах L·R бывает почти нулём, поэтому «тихое» — не ниже
+  // громкого минус 30 дБ, иначе порог упадёт и пением станет любой шорох. Провалы между слогами короче 250 мс не пауза
+  const hi = q[Math.floor(F * 0.8)], lo = Math.max(q[Math.floor(F * 0.2)], hi - 30);
+  let seg = [];
+  if (hi - lo > 3) {
+    for (let f = 0; f < F; f++) {
+      if (db[f] <= (lo + hi) / 2) continue;
+      const s = seg[seg.length - 1];
+      if (s && f - s[1] < 5) s[1] = f + 1; else seg.push([f, f + 1]);
+    }
+  }
+  seg = seg.filter(([a, b]) => b - a >= 5);
+  if (!seg.length) seg = [[0, F]]; // громкость ровная — пауз не найти, тогда поровну на всю песню
+  // возможные начала строк — каждые полсекунды внутри фраз: поющее время u (паузы выкинуты), кадр, сразу ли после паузы
+  const u = [], fr = [], on = [], g = Math.max(1, Math.min(10, Math.floor(F / n)));
+  let U = 0;
+  for (const [a, b] of seg) { for (let f = a; f < b; f += g) { u.push(U + f - a); fr.push(f); on.push(f === a ? 0 : 1); } U += b - a; }
+  const syl = lines.map((x) => (x.match(/[aeiouyæøåäöüÿéèêëáàâíìîïóòôõúùûаеёиоуыэюяіїє]+/gi) || []).length || x.replace(/\s/g, '').length);
+  const all = syl.reduce((s, x) => s + x, 0), C = u.length;
+  // цена длины: квадрат ошибки в долях ожидаемой; если строка намного длиннее, дальше проигрыш — это дешевле
+  const len = (x, e, avg) => { const r = (x - e) / e; return r < 0 ? r * r : Math.min(r * r, 1 + (0.1 * (x - e)) / avg); };
+  let best = null;
+  // часть «поющего» времени может оказаться гитарой, поэтому темп пробуем и чуть быстрее
+  for (const k of [1, 0.85, 0.7]) {
+    const avg = (U * k) / n, back = [];
+    let cost = Float64Array.from(u, (x, c) => on[c] + (0.2 * x) / avg); // первая строка может пропустить вступление
+    for (let i = 1; i < n; i++) {
+      const e = (syl[i - 1] / all) * U * k, nc = new Float64Array(C), bk = new Int32Array(C);
+      // начала дальше 3e: там цена растёт с длиной линейно, лучшее из них — бегущий минимум, без перебора
+      let j = 0, fm = Infinity, fp = 0;
+      for (let c = 0; c < C; c++) {
+        for (; j < c && u[c] - u[j] > Math.max(3 * e, g); j++) { const v = cost[j] - (0.1 * u[j]) / avg; if (v < fm) { fm = v; fp = j; } }
+        let m = fm + 1 + (0.1 * (u[c] - e)) / avg, b = fp;
+        for (let p = j; p < c; p++) { const x = u[c] - u[p], v = x < g ? Infinity : cost[p] + len(x, e, avg); if (v < m) { m = v; b = p; } }
+        nc[c] = m + on[c];
+        bk[c] = b;
+      }
+      back.push(bk);
+      cost = nc;
+    }
+    let c = 0, v = Infinity;
+    cost.forEach((x, j) => { const y = x + len(U - u[j], (syl[n - 1] / all) * U * k, avg); if (y < v) { v = y; c = j; } });
+    if (v < Infinity && (!best || v < best.v)) { const idx = [c]; for (let i = n - 2; i >= 0; i--) idx.unshift(back[i][idx[0]]); best = { v, idx }; }
+  }
+  // строк больше, чем полсекунд с голосом, — просто поровну
+  const at = best ? best.idx.map((c) => fr[c]) : lines.map((_, i) => (i * F) / n);
+  return lines.map((text, i) => ({ t: Math.max(0, Math.round(at[i] * 50 - 100)), text })); // чуть раньше голоса, как при разметке пробелом
+}
 // ссылка → что это: видео/плейлист YouTube, трек/плейлист SoundCloud или прямая ссылка на файл
 function parseNetUrl(raw) {
   let u;
@@ -108,4 +185,4 @@ async function lrclibFind(getJson, q) {
     return plain ? { plain } : null;
   } catch { return null; }
 }
-if (typeof module !== 'undefined') module.exports = { lrclibFind, hashStr, rng, fmtDur, cleanName, parseLRC, lineAt, retextLine, peaks, parseNetUrl, splitTitle };
+if (typeof module !== 'undefined') module.exports = { lrclibFind, hashStr, rng, fmtDur, cleanName, parseLRC, lineAt, retextLine, peaks, voiceEnv, autoLyrics, parseNetUrl, splitTitle };

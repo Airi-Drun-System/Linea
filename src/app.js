@@ -256,6 +256,11 @@ const srcOf = (s) => (settings.karaoke && s.inst ? s.inst : s.blob);
 
 const saveSong = (song) => { if (song.feed) return; const { img, imgUrl, imgPromise, bgUrl, vox, ...rec } = song; DB.put(rec); };
 const lyricsOf = (s) => (s && s.lyrics && s.lyrics.length ? s.lyrics : null);
+// свой файл, который можно разобрать целиком: декодер держит в памяти всю песню, часовой микс — около 2.7 ГБ,
+// телефон от такого падает. Волна и авторазметка — украшения, у длинных обойдёмся без них
+const decodable = (s) => !!s.blob && !s.kind && !(s.duration > 10 * 60000 || s.blob.size > 1e8);
+// есть только текст без таймингов — строки расставим по звуку сами
+const autoNeed = (s) => decodable(s) && !!s.plain && !lyricsOf(s);
 
 function toast(text) {
   const t = document.createElement('div');
@@ -568,7 +573,7 @@ function renderSongs() {
     const img = el.querySelector('img');
     if (s.imgUrl) img.src = s.imgUrl; else songImage(s).then(() => { img.src = s.imgUrl; });
     el.querySelector('b').textContent = s.name;
-    el.querySelector('small').textContent = [s.artist, s.duration ? fmtDur(s.duration) : '', s.kind && (s.kind === 'yt' ? 'YouTube' : 'SoundCloud'), lyricsOf(s) && 'слова'].filter(Boolean).join(' · ');
+    el.querySelector('small').textContent = [s.artist, s.duration ? fmtDur(s.duration) : '', s.kind && (s.kind === 'yt' ? 'YouTube' : 'SoundCloud'), lyricsOf(s) && (s.lyrAuto ? 'слова примерно' : 'слова')].filter(Boolean).join(' · ');
     const del = el.querySelector('.del');
     del.addEventListener('click', async (e) => {
       e.stopPropagation();
@@ -986,7 +991,7 @@ async function load(song, autoplay) {
   feedOnLoad(song); likeBtn(); mediaPush();
   if (slideDir) { const c = document.querySelector('.cover'); c.classList.remove('inNext', 'inPrev'); void c.offsetWidth; c.classList.add(slideDir > 0 ? 'inNext' : 'inPrev'); slideDir = 0; }
   waveDirty = true;
-  if (!song.wave && song.blob) waveOf(song);
+  if (song.blob) waveOf(song);
   if (autoplay) play(fade);
   showModes();
   await songImage(song);
@@ -1110,6 +1115,7 @@ function renderLines() {
   $('lyrBtn').ariaPressed = String(settings.lyricsOn !== false);
   $('findLrc').hidden = !window.lnApp;
   $('offs').hidden = !lyricsOf(cur) || !!sync;
+  $('lyrFix').hidden = !(cur && cur.lyrAuto && lyricsOf(cur)) || !!sync;
   $('offV').textContent = offText();
   lines.forEach((l) => {
     const el = document.createElement('div');
@@ -1163,11 +1169,14 @@ async function findLyrics(song, quiet, q) {
   try {
     const r = await window.lnApp.findLyrics(Object.assign({ title: song.name, artist: song.artist || '', duration: Math.round(song.duration / 1000) }, q));
     const lines = r && r.synced ? parseLRC(r.synced) : [];
-    if (lines.length) { song.lyrics = lines; song.lyrOff = 0; }
-    else if (r && r.plain) song.plain = r.plain;
+    if (lines.length) { song.lyrics = lines; song.lyrOff = 0; delete song.lyrAuto; }
+    else if (r && r.plain) { song.plain = r.plain; if (song.lyrAuto) song.lyrics = null; } // новый текст расставим заново
     saveSong(song);
+    const auto = autoNeed(song);
+    if (auto && song === cur) waveOf(song);
     if (!quiet && !lines.length) {
-      if (r && r.plain && q) { searching.delete(song.id); syncOpen(r.plain); toast('Нашёлся текст. Разметь его пробелом'); }
+      if (auto) toast('Нашёлся текст без таймингов. Строки встанут по звуку, примерно');
+      else if (r && r.plain && q) { searching.delete(song.id); syncOpen(r.plain); toast('Нашёлся текст. Разметь его пробелом'); }
       else toast(r && r.plain ? 'Нашёлся только текст без таймингов' : 'Слова не нашлись');
     }
     return lines.length > 0;
@@ -1202,6 +1211,7 @@ $('lrcFile').addEventListener('change', async (e) => {
   const lines = parseLRC(await f.text());
   if (!lines.length) { toast('В файле нет меток времени вида [01:23.45]'); return; }
   song.lyrics = lines;
+  delete song.lyrAuto;
   saveSong(song);
   renderLines(); renderSongs();
 });
@@ -1229,6 +1239,7 @@ function syncDone(save) {
   if (save) {
     cur.lyrics = sync.lines.map((text, k) => ({ t: sync.stamps[k], text }));
     cur.lyrOff = 0;
+    delete cur.lyrAuto;
     saveSong(cur);
     renderSongs();
   }
@@ -1238,6 +1249,7 @@ function syncDone(save) {
   if (save) { audio.currentTime = 0; play(); toast('Слова сохранены'); }
 }
 $('editLrc').addEventListener('click', syncOpen);
+$('lyrFix').addEventListener('click', syncOpen);
 $('syncGo').addEventListener('click', () => {
   const lines = $('syncText').value.split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
   if (!lines.length) { $('syncText').focus(); return; }
@@ -1248,7 +1260,8 @@ $('syncGo').addEventListener('click', () => {
   audio.currentTime = 0;
   play();
 });
-$('syncClear').addEventListener('click', () => { cur.lyrics = null; saveSong(cur); $('syncDlg').hidden = true; renderLines(); renderSongs(); });
+// и текст тоже, иначе авторазметка вернёт слова при следующем запуске песни
+$('syncClear').addEventListener('click', () => { cur.lyrics = null; delete cur.plain; delete cur.lyrAuto; saveSong(cur); $('syncDlg').hidden = true; renderLines(); renderSongs(); });
 $('syncCancel').addEventListener('click', () => { $('syncDlg').hidden = true; });
 $('syncTap').addEventListener('click', () => sync && syncTap());
 $('syncUndo').addEventListener('click', () => sync && syncUndo());
@@ -1380,18 +1393,26 @@ function sleepStop() { sleepAt = 0; sleepEnd = false; sleepI = 0; audio.pause();
 setInterval(() => { if (sleepAt) { if (Date.now() >= sleepAt) sleepStop(); else sleepShow(); } }, 5000);
 
 // ==================== волна, скорость, режимы, сдвиг слов ====================
-let waveDirty = true, wavePx = -1;
-async function waveOf(song) {
-  // декодер держит в памяти всю песню в исходной частоте: часовой микс — около 2.7 ГБ, телефон от такого падает,
-  // и снова при каждом запуске, если микс играл последним. Волна — украшение, у длинных обойдёмся без неё
-  if (song.duration > 10 * 60000 || song.blob.size > 1e8) return;
-  try {
-    // 8 кГц моно хватает, чтобы увидеть громкость, и считается быстро
-    const buf = await new OfflineAudioContext(1, 1, 8000).decodeAudioData(await song.blob.arrayBuffer());
-    song.wave = peaks(buf.getChannelData(0), 200);
-    saveSong(song);
-    if (song === cur) waveDirty = true;
-  } catch { /* не декодируется — останется ровная полоска */ }
+let waveDirty = true, wavePx = -1, waveQ = Promise.resolve();
+// песни разбираем по одной и только текущую: быстрое листание не должно запускать десяток декодеров сразу
+function waveOf(song) { waveQ = waveQ.then(() => song === cur && analyze(song)).catch(() => {}); }
+async function analyze(song) {
+  const auto = autoNeed(song);
+  if (!decodable(song) || (song.wave && !auto)) return;
+  // 8 кГц хватает и волне, и полосе голоса (до 3400 Гц), и считается быстро
+  const buf = await new OfflineAudioContext(1, 1, 8000).decodeAudioData(await song.blob.arrayBuffer()).catch(() => null);
+  if (!buf) return; // не декодируется — останется ровная полоска
+  const ch = buf.getChannelData(0);
+  if (!song.wave) song.wave = peaks(ch, 200);
+  let made = false;
+  if (auto && autoNeed(song)) { // пока декодировали, слова могли найтись или их разметили вручную
+    const lines = autoLyrics(voiceEnv(ch, buf.numberOfChannels > 1 ? buf.getChannelData(1) : null, 8000), song.plain);
+    if (lines.length) { Object.assign(song, { lyrics: lines, lyrOff: 0, lyrAuto: true }); made = true; }
+  }
+  saveSong(song);
+  if (song !== cur) return;
+  waveDirty = true;
+  if (made) { renderLines(); renderSongs(); }
 }
 // полоса перемотки: сыгранная часть — живая волна (как загрузка в Google Play), по ней бежит котокролик;
 // под мышкой полоса плавно «вырастает» в столбики битов

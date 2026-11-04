@@ -1,6 +1,6 @@
 'use strict';
 const assert = require('assert');
-const { parseLRC, lineAt, fmtDur, cleanName, retextLine, peaks, parseNetUrl, splitTitle, lrclibFind } = require('../src/lib.js');
+const { parseLRC, lineAt, fmtDur, cleanName, retextLine, peaks, voiceEnv, autoLyrics, parseNetUrl, splitTitle, lrclibFind } = require('../src/lib.js');
 
 const L = parseLRC('[ar:x]\n[00:01.50]раз\n[00:00.20][00:03.00]два\nбез метки\n[01:02.5]три');
 assert.deepStrictEqual(L.map((l) => [Math.round(l.t), l.text]), [[200, 'два'], [1500, 'раз'], [3000, 'два'], [62500, 'три']]);
@@ -38,6 +38,35 @@ assert.deepStrictEqual(splitTitle('Кино - Группа крови (Official 
 assert.deepStrictEqual(splitTitle('Blinding Lights', 'The Weeknd - Topic'), { name: 'Blinding Lights', artist: 'The Weeknd' });
 assert.deepStrictEqual(splitTitle('mashup v2 by djx', 'djx'), { name: 'mashup v2', artist: 'djx' });
 assert.deepStrictEqual(splitTitle('Song [Lyric Video]', ''), { name: 'Song', artist: '' });
+// авторазметка на синтетике, 8 кГц: громкая бочка 60 Гц и тихий подклад всё время, «голос» 800 Гц — слогами в пяти фразах
+const SR = 8000, tone = (f, t) => Math.sin(2 * Math.PI * f * t);
+const phrases = [[4, 7.5], [8.3, 11.6], [12.4, 15.8], [26, 29.5], [30.2, 33.8]];
+const song = Float32Array.from({ length: 40 * SR }, (_, i) => {
+  const t = i / SR, kick = 0.8 * Math.max(0, Math.sin(Math.PI * (t % 0.5) / 0.125)) ** 2 * ((t % 0.5) < 0.125) * tone(60, t);
+  const voice = phrases.some(([a, b]) => t >= a && t < b && (t - a) % 0.25 < 0.2) ? 0.3 * tone(800, t) : 0;
+  return kick + 0.04 * tone(440, t) + voice;
+});
+// и то же в стерео без подклада, где гитара звучит только слева: в паузах L·R почти ноль, но тихий шорох
+// за 0.2 с до фразы не должен сдвигать строку
+const dry = song.map((v, i) => v - 0.04 * tone(440, i / SR) + (i >= 8.05 * SR && i < 8.15 * SR ? 0.003 * tone(1000, i / SR) : 0));
+const left = dry.map((v, i) => v + 0.25 * Math.exp(-(i % 2000) / 1000) * tone([392, 494, 587, 659][(i / 2000 | 0) % 4], i / SR));
+for (const [L, R] of [[song, null], [left, dry]]) {
+  const e = voiceEnv(L, R, SR);
+  assert.strictEqual(e.length, 800);
+  const five = autoLyrics(e, 'раз два три\n\n[Припев]\nчетыре пять шесть\nсемь восемь\nдевять десять\nодиннадцать двенадцать');
+  assert.deepStrictEqual(five.map((l) => l.text), ['раз два три', 'четыре пять шесть', 'семь восемь', 'девять десять', 'одиннадцать двенадцать']);
+  five.forEach((l, i) => assert.ok(Math.abs(l.t - phrases[i][0] * 1000) <= 300, `${R ? 'стерео' : 'моно'}, строка ${i}: ${l.t}`));
+}
+const env = voiceEnv(song, null, SR);
+// строк больше, чем фраз: по порядку, не раньше голоса и в пределах песни
+const nine = autoLyrics(env, 'a\nb\nc\nd\ne\nf\ng\nh\ni').map((l) => l.t);
+assert.ok(nine.every((t, i) => !i || t > nine[i - 1]) && nine[0] >= 3700 && nine[8] < 40000, String(nine));
+// ровный звук без пауз — поровну на всю песню
+assert.deepStrictEqual(autoLyrics(voiceEnv(Float32Array.from({ length: 20 * SR }, (_, i) => 0.3 * tone(1000, i / SR)), null, SR), 'a\nb\nc\nd').map((l) => l.t), [0, 4900, 9900, 14900]);
+assert.deepStrictEqual(autoLyrics(env, '\n [Intro] \n'), []);
+// полоса голоса: бас глушится больше чем на 30 дБ; звук только в одном канале или в противофазе — не голос
+const one = (f, g = 1) => voiceEnv(Float32Array.from({ length: SR }, (_, i) => tone(f, i / SR)), Float32Array.from({ length: SR }, (_, i) => g * tone(f, i / SR)), SR)[10];
+assert.ok(one(60) / one(1000) < 0.03 && one(1000, 0) === 0 && one(1000, -1) === 0 && Math.abs(one(1000) - Math.SQRT1_2) < 0.05);
 // слова: точное совпадение, потом поиск с близкой длиной
 (async () => {
   const db = { get: { plainLyrics: 'p' }, search: [{ duration: 300, syncedLyrics: 'far' }, { duration: 182, syncedLyrics: 'near' }] };
