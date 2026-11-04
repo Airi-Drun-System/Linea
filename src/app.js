@@ -156,6 +156,7 @@ function songImage(song) {
 // ==================== библиотека ====================
 const songs = [];
 let cur = null; // песня, которая играет
+const found = []; // результаты поиска: играют, но в библиотеку попадают только по сердечку или «+»
 const feed = []; // лента: песни SoundCloud, которых нет в библиотеке (пока не нажал сердечко)
 let query = '';
 const decks = [new Audio(), new Audio()];
@@ -458,7 +459,7 @@ async function feedStart() {
 }
 // что услышали — в ленту больше не попадает; когда песни кончаются, подгружаем ещё
 function feedOnLoad(song) {
-  if (!song.feed) return;
+  if (!song.feed || !feed.includes(song)) return;
   seen.add(song.id);
   store.set('ln.seen', [...seen].slice(-400));
   if (feed.length - feed.indexOf(song) <= 3) feedFill();
@@ -567,7 +568,7 @@ let playlists = store.get('ln.playlists', []); // [{ id, name, ids }]
 let view = 'all', ctx = 'all'; // что открыто в списке и откуда играет очередь
 const savePls = () => store.set('ln.playlists', playlists);
 const plById = (id) => playlists.find((p) => p.id === id);
-const listOf = (v) => { if (v === 'feed') return feed; const p = plById(v); return p ? p.ids.map((id) => songs.find((s) => s.id === id)).filter(Boolean) : songs; };
+const listOf = (v) => { if (v === 'feed') return feed; if (v === 'search') return found; const p = plById(v); return p ? p.ids.map((id) => songs.find((s) => s.id === id)).filter(Boolean) : songs; };
 const queue = () => listOf(ctx);
 const plural = (n) => `${n} ${n % 10 === 1 && n % 100 !== 11 ? 'песня' : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? 'песни' : 'песен'}`;
 
@@ -736,6 +737,7 @@ function renderBgDlg() {
   $('accCol').value = settings.accent || (cur && cur.pal ? cur.pal[0] : '#d4d4da');
   $('lyrSize').value = settings.lyrScale || 1; $('lyrSizeV').textContent = Math.round((settings.lyrScale || 1) * 100) + '%';
   $('trayOn').checked = settings.tray !== false;
+  $('ytKey').value = settings.ytKey || '';
   updRefresh();
   document.querySelectorAll('#themeSeg button').forEach((b) => b.classList.toggle('on', b.dataset.th === (settings.theme || 'dark')));
   $('sideA').value = settings.sideA || 0.55; $('sideAV').textContent = Math.round((1 - (settings.sideA || 0.55)) * 100) + '%';
@@ -936,6 +938,14 @@ async function load(song, autoplay) {
   store.set('ln.last', song.id);
   if (song.kind) {
     if (audio !== net) { audio.pause(); audio = net; }
+    if (song.kind === 'yt' && !song.vid) { // песня из списка названий: ищем её на YouTube, когда до неё дошла очередь
+      net.removeAttribute('src');
+      showSong(); upText(); renderSongs();
+      const ok = await ytResolve(song);
+      if (cur !== song) return;
+      if (!ok) { toast(`Не нашлась: ${song.name}`); if (autoplay) step(1); return; }
+      waveDirty = true;
+    }
     net.open(song, autoplay);
   } else {
     setSrc(audio, srcOf(song));
@@ -968,7 +978,7 @@ function step(d) {
   if (sync || !q.length) return;
   if (d < 0 && audio.currentTime > 3) { audio.currentTime = 0; return; } // как в любом плеере: сначала в начало песни
   let nx = null;
-  if (d < 0) while (hist.length && !nx) { const h = hist.pop(); if ((songs.includes(h) || feed.includes(h)) && h !== cur) nx = h; }
+  if (d < 0) while (hist.length && !nx) { const h = hist.pop(); if ((songs.includes(h) || feed.includes(h) || found.includes(h)) && h !== cur) nx = h; }
   if (!nx && d > 0 && settings.shuffle && ctx !== 'feed' && q.length > 1) do nx = q[Math.floor(Math.random() * q.length)]; while (nx === cur);
   if (!nx) { const i = cur ? q.indexOf(cur) : -1; nx = q[(i + d + q.length) % q.length]; }
   if (d > 0) pushHist();
@@ -998,6 +1008,7 @@ onDeck('timeupdate', () => {
   if ((audio.duration - audio.currentTime) / audio.playbackRate <= settings.xfade) { xfading = true; step(1); }
 });
 onDeck('ended', () => {
+  if (sleepEnd) { sleepStop(); return; }
   if (!sync && settings.repeat) { audio.currentTime = 0; play(); return; }
   if (!sync) return step(1);
   // песня кончилась посреди разметки: сохраняем то, что успели
@@ -1173,6 +1184,126 @@ $('syncStop').addEventListener('click', () => sync && syncDone(false));
 let cancelJob = null;
 $('loadCancel').addEventListener('click', () => cancelJob && cancelJob());
 
+
+// ==================== поиск: YouTube прямо в Linea ====================
+// официальный YouTube Data API с ключом пользователя; 1 поиск = 100 единиц из 10 000 в день, поэтому ищем по Enter и кешируем
+const decode = (t) => new DOMParser().parseFromString(String(t || ''), 'text/html').documentElement.textContent;
+const sCache = new Map(store.get('ln.sCache', []));
+async function ytSearch(q, n) {
+  const key = (settings.ytKey || '').trim();
+  if (!key) throw new Error('Нужен ключ YouTube: Настройки → Поиск');
+  const ck = n + '|' + q.toLowerCase();
+  if (sCache.has(ck)) return sCache.get(ck);
+  const u = 'https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoEmbeddable=true&maxResults=' + n + '&q=' + encodeURIComponent(q) + '&key=' + encodeURIComponent(key);
+  const r = await fetch(u);
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    const why = j && j.error && (j.error.errors || [])[0] && j.error.errors[0].reason;
+    throw new Error(why === 'quotaExceeded' ? 'Поиски на сегодня кончились, лимит обновится в 10:00 по Москве' : why === 'keyInvalid' || r.status === 400 ? 'Ключ YouTube не подходит, проверь его в настройках' : `YouTube ответил ${r.status}`);
+  }
+  const items = (j.items || []).filter((x) => x.id && x.id.videoId).map((x) => ({ vid: x.id.videoId, title: decode(x.snippet.title), artist: decode(x.snippet.channelTitle) }));
+  sCache.set(ck, items);
+  store.set('ln.sCache', [...sCache].slice(-60));
+  return items;
+}
+async function ytResolve(song) {
+  try {
+    const [it] = await ytSearch(song.q || `${song.artist} ${song.name}`, 1);
+    if (!it) return false;
+    song.vid = it.vid;
+    song.cover = await netCover({ kind: 'yt', vid: it.vid });
+    delete song.imgPromise; delete song.img; delete song.imgUrl;
+    saveSong(song);
+    return true;
+  } catch (e) { toast(e.message); return false; }
+}
+function searchOpen() {
+  $('searchDlg').hidden = false;
+  $('sIn').focus(); $('sIn').select();
+  if (!settings.ytKey) $('sNote').textContent = 'Сначала вставь ключ YouTube: Настройки → Поиск.';
+}
+async function searchGo() {
+  const q = $('sIn').value.trim();
+  if (!q) return;
+  $('sNote').textContent = 'Ищу…';
+  $('sRes').textContent = '';
+  let items;
+  try { items = await ytSearch(q, 15); } catch (e) { $('sNote').textContent = e.message; return; }
+  $('sNote').textContent = items.length ? '' : 'Ничего не нашлось.';
+  found.length = 0;
+  for (const it of items) {
+    const have = songs.find((x) => x.id === 'yt' + it.vid);
+    const s = have || Object.assign({ id: 'yt' + it.vid, kind: 'yt', vid: it.vid, duration: 0, added: Date.now(), feed: true }, splitTitle(it.title, it.artist));
+    found.push(s);
+    const el = document.createElement('div');
+    el.className = 'sItem'; el.tabIndex = 0;
+    el.innerHTML = '<img alt=""><span><b></b><small></small></span><button class="mini" title="В Мои песни">+</button>';
+    el.querySelector('b').textContent = it.title;
+    el.querySelector('small').textContent = it.artist;
+    const add = el.querySelector('.mini');
+    const mark = () => { add.classList.toggle('on', !s.feed); add.textContent = s.feed ? '+' : '✓'; };
+    mark();
+    add.addEventListener('click', (e) => { e.stopPropagation(); if (s.feed) like(s); mark(); });
+    const go = () => { ctx = 'search'; pushHist(); load(s, true); $('searchDlg').hidden = true; };
+    el.addEventListener('click', go);
+    el.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
+    $('sRes').appendChild(el);
+    // превью и обложка: картинка с YouTube через приложение (страница сама в интернет не ходит)
+    (s.cover ? Promise.resolve(s.cover) : netCover({ kind: 'yt', vid: it.vid }).then((b) => { if (b && !s.cover) s.cover = b; return b; }))
+      .then((b) => { if (b) el.querySelector('img').src = URL.createObjectURL(b); });
+  }
+}
+$('searchBtn').addEventListener('click', searchOpen);
+$('sGo').addEventListener('click', searchGo);
+$('sIn').addEventListener('keydown', (e) => { if (e.key === 'Enter') searchGo(); if (e.key === 'Escape') $('searchDlg').hidden = true; });
+$('sClose').addEventListener('click', () => { $('searchDlg').hidden = true; });
+$('ytKey').addEventListener('change', () => { settings.ytKey = $('ytKey').value.trim(); saveSettings(); });
+$('ytKeyChk').addEventListener('click', async () => {
+  settings.ytKey = $('ytKey').value.trim(); saveSettings();
+  try { await ytSearch('test ' + Date.now(), 1); toast('Ключ работает, поиск включён'); } catch (e) { toast(e.message); }
+});
+// плейлист из списка названий: песни ищутся по одной, когда до них доходит очередь
+$('listOpen').addEventListener('click', () => { $('urlDlg').hidden = true; $('listDlg').hidden = false; $('listText').focus(); });
+$('listCancel').addEventListener('click', () => { $('listDlg').hidden = true; });
+$('listGo').addEventListener('click', async () => {
+  const lines = $('listText').value.split(/\r?\n/).map((l) => l.replace(/^\s*\d+[.)]\s*/, '').trim()).filter(Boolean).slice(0, 1000);
+  if (!lines.length) { toast('Список пустой'); return; }
+  const pl = { id: 'p' + Date.now().toString(36), name: ($('listName').value.trim() || 'Из списка').slice(0, 60), ids: [] };
+  for (const l of lines) {
+    const id = 'q' + hashStr(l.toLowerCase()).toString(36);
+    let s = songs.find((x) => x.id === id);
+    if (!s) {
+      const m = l.match(/^(.+?)\s+[-–—]\s+(.+)$/);
+      s = { id, kind: 'yt', q: l, name: m ? m[2] : l, artist: m ? m[1] : '', duration: 0, added: Date.now() };
+      songs.push(s);
+      await DB.put(s);
+    }
+    if (!pl.ids.includes(id)) pl.ids.push(id);
+  }
+  playlists.push(pl);
+  view = pl.id;
+  savePls(); renderPls(); renderSongs();
+  $('listDlg').hidden = true; $('listText').value = ''; $('listName').value = '';
+  toast(`Плейлист «${pl.name}»: ${pl.ids.length} песен. Найдутся, когда заиграют`);
+});
+
+// ==================== таймер сна ====================
+const SLEEP = [0, 15, 30, 60, -1]; // минуты; -1 — до конца песни
+let sleepAt = 0, sleepEnd = false, sleepI = 0;
+function sleepShow() {
+  const b = $('sleep');
+  b.classList.toggle('on', !!(sleepAt || sleepEnd));
+  b.textContent = sleepEnd ? 'Сон: песня' : sleepAt ? `Сон ${Math.max(1, Math.ceil((sleepAt - Date.now()) / 60000))} мин` : 'Сон';
+}
+$('sleep').addEventListener('click', () => {
+  sleepI = (sleepI + 1) % SLEEP.length;
+  const m = SLEEP[sleepI];
+  sleepEnd = m === -1; sleepAt = m > 0 ? Date.now() + m * 60000 : 0;
+  sleepShow();
+  toast(m === 0 ? 'Таймер сна выключен' : m === -1 ? 'Остановлю в конце этой песни' : `Остановлю через ${m} мин`);
+});
+function sleepStop() { sleepAt = 0; sleepEnd = false; sleepI = 0; audio.pause(); sleepShow(); toast('Спокойной ночи'); }
+setInterval(() => { if (sleepAt) { if (Date.now() >= sleepAt) sleepStop(); else sleepShow(); } }, 5000);
 
 // ==================== волна, скорость, режимы, сдвиг слов ====================
 let waveDirty = true, wavePx = -1;
@@ -1628,6 +1759,9 @@ addEventListener('keydown', (e) => {
   if (!$('bgDlg').hidden) { if (e.code === 'Escape') $('bgDlg').hidden = true; return; }
   if (!$('findDlg').hidden) { if (e.code === 'Escape') $('findDlg').hidden = true; return; }
   if (!$('urlDlg').hidden) { if (e.code === 'Escape') $('urlDlg').hidden = true; return; }
+  if (!$('searchDlg').hidden) { if (e.code === 'Escape') $('searchDlg').hidden = true; return; }
+  if (!$('listDlg').hidden) { if (e.code === 'Escape') $('listDlg').hidden = true; return; }
+  if ((e.ctrlKey && e.code === 'KeyF') || (e.key === '/' && tag !== 'INPUT')) { e.preventDefault(); searchOpen(); return; }
   if (!$('syncDlg').hidden || tag === 'TEXTAREA' || (tag === 'INPUT' && e.target.type !== 'range')) {
     if (e.code === 'Escape') { $('syncDlg').hidden = true; e.target.blur(); }
     return;
