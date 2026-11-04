@@ -868,27 +868,40 @@ async function waveOf(song) {
     if (song === cur) waveDirty = true;
   } catch { /* не декодируется — останется ровная полоска */ }
 }
+// полоса перемотки: обычно тонкая линия, под мышкой плавно «вырастает» в волну битов
+let waveMorph = 0, waveHover = false;
 function drawWave() {
   const cv = $('waveCv'), w = cv.clientWidth, h = cv.clientHeight, dpr = devicePixelRatio || 1;
   if (!w) return;
   const v = cur && audio.duration ? (seeking ? $('seek').value / 1000 : audio.currentTime / audio.duration) : 0;
   const px = Math.round(v * w);
+  const target = waveHover || seeking ? 1 : 0;
+  const moving = Math.abs(target - waveMorph) > 0.002;
+  if (moving) waveMorph += (target - waveMorph) * 0.16; else waveMorph = target;
   if (cv.width !== Math.round(w * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); waveDirty = true; }
-  if (!waveDirty && px === wavePx) return;
+  if (!waveDirty && !moving && px === wavePx) return;
   waveDirty = false; wavePx = px;
-  const x = cv.getContext('2d'), wave = cur && cur.wave, bw = 3, gap = 2, n = Math.floor(w / (bw + gap));
+  const x = cv.getContext('2d'), wave = cur && cur.wave, step = 5, n = Math.floor(w / step), m = waveMorph * waveMorph * (3 - 2 * waveMorph);
   const a1 = getComputedStyle(document.documentElement).getPropertyValue('--a1').trim() || '#fff';
+  const line = 4, bw = step - 2 * m; // при m=0 столбики сливаются в сплошную линию
   x.setTransform(dpr, 0, 0, dpr, 0, 0);
   x.clearRect(0, 0, w, h);
+  if (m < 0.03) { // спокойное состояние — ровная тонкая полоса
+    x.fillStyle = `rgba(${fgRGB()},.22)`; x.beginPath(); x.roundRect(0, (h - line) / 2, w, line, line / 2); x.fill();
+    x.fillStyle = a1; x.beginPath(); x.roundRect(0, (h - line) / 2, Math.max(line, px), line, line / 2); x.fill();
+    return;
+  }
   for (let k = 0; k < n; k++) {
     const amp = wave ? wave[Math.floor((k / n) * wave.length)] : 0.3;
-    const bh = Math.max(3, amp * (h - 4)), bx = k * (bw + gap);
+    const bh = line + (Math.max(3, amp * (h - 4)) - line) * m, bx = k * step;
     x.fillStyle = bx + bw / 2 <= px ? a1 : `rgba(${fgRGB()},.22)`;
     x.beginPath();
-    x.roundRect(bx, (h - bh) / 2, bw, bh, 1.5);
+    x.roundRect(bx, (h - bh) / 2, bw + 0.5 * (1 - m), bh, m > 0.2 ? 1.5 : 0);
     x.fill();
   }
 }
+$('seek').parentElement.addEventListener('pointerenter', () => { waveHover = true; });
+$('seek').parentElement.addEventListener('pointerleave', () => { waveHover = false; });
 addEventListener('resize', () => { waveDirty = true; });
 
 // скорость: обычная, sped up, slowed
