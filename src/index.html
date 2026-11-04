@@ -20,12 +20,15 @@
 /* Linea: весь плеер красится в цвета обложки текущей песни */
 :root{
   color-scheme:dark;
+  --fg-rgb:246,245,250;  /* тёмная тема */
+  --bg-rgb:20,20,26;
+  --shade-rgb:9,9,13;
   --ink:#09090D;
-  --glass:rgba(255,255,255,.065);
-  --glass-2:rgba(255,255,255,.11);
-  --line:rgba(255,255,255,.11);
-  --fg:#F6F5FA;
-  --dim:rgba(246,245,250,.62);
+  --glass:rgba(var(--fg-rgb),.065);
+  --glass-2:rgba(var(--fg-rgb),.11);
+  --line:rgba(var(--fg-rgb),.11);
+  --fg:rgb(var(--fg-rgb));
+  --dim:rgba(var(--fg-rgb),.62);
   --a1:#D4D4DA; --a2:#8B8B95; --a3:#B9B9C2; --on-a1:#111114;
   --bad:#FF5468;
   --display:"Dela Gothic One","Arial Black",system-ui,sans-serif;
@@ -34,6 +37,9 @@
   --spring:cubic-bezier(.34,1.56,.64,1);
   --kick:0;
 }
+/* светлая тема: тот же плеер, светлые подложки и тёмный текст */
+:root[data-theme=light]{color-scheme:light;--fg-rgb:22,22,28;--bg-rgb:246,246,249;--shade-rgb:238,238,243;--ink:#EDEDF1;--a1:#3A3A44;--on-a1:#FFFFFF}
+:root[data-theme=light] .backdrop .img.show{opacity:.5}
 [hidden]{display:none!important}
 h1,h2,h3,p{margin:0}
 html,body{height:100%}
@@ -59,7 +65,7 @@ kbd{font:700 12px var(--ui);background:var(--glass-2);border:1px solid var(--lin
 #bgV.show{opacity:.75}
 #fx{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 /* затемнение: на ударах баса чуть расступается — фон «дышит» */
-.backdrop .shade{position:absolute;inset:0;opacity:calc(1 - var(--kick) * var(--bg-react,.45));background:radial-gradient(120% 90% at 30% 40%,transparent 0,rgba(9,9,13,.5) 58%,rgba(9,9,13,.9) 100%),rgba(9,9,13,var(--bg-dim,.25))}
+.backdrop .shade{position:absolute;inset:0;opacity:calc(1 - var(--kick) * var(--bg-react,.45));background:radial-gradient(120% 90% at 30% 40%,transparent 0,rgba(var(--shade-rgb),.5) 58%,rgba(var(--shade-rgb),.9) 100%),rgba(var(--shade-rgb),var(--bg-dim,.25))}
 
 .app{position:fixed;inset:0;display:flex;flex-direction:column;padding:16px 24px 24px;animation:fade .5s var(--ease) both}
 .glass{background:var(--glass);border:1px solid var(--line);backdrop-filter:blur(24px) saturate(1.3);border-radius:22px}
@@ -67,7 +73,7 @@ kbd{font:700 12px var(--ui);background:var(--glass-2);border:1px solid var(--lin
 .pill:hover{background:var(--glass-2)}
 
 /* ---------- библиотека ---------- */
-.side{position:fixed;z-index:6;left:0;top:0;bottom:0;width:340px;max-width:calc(100vw - 48px);display:flex;flex-direction:column;gap:10px;padding:18px 16px;background:#111114;transform:translateX(-102%);transition:transform .32s cubic-bezier(.23,1,.32,1)}
+.side{position:fixed;z-index:6;left:0;top:0;bottom:0;width:340px;max-width:calc(100vw - 48px);display:flex;flex-direction:column;gap:10px;padding:18px 16px;background:rgba(var(--bg-rgb),var(--side-a,.55));backdrop-filter:blur(30px) saturate(1.3);transform:translateX(-102%);transition:transform .32s cubic-bezier(.23,1,.32,1)}
 body.lib .side{transform:none;box-shadow:24px 0 60px rgba(0,0,0,.45)}
 .scrim{position:fixed;inset:0;z-index:5;background:rgba(0,0,0,.4);opacity:0;pointer-events:none;transition:opacity .25s}
 body.lib .scrim{opacity:1;pointer-events:auto}
@@ -76,20 +82,20 @@ body.lib .scrim{opacity:1;pointer-events:auto}
 .x:hover{background:var(--glass-2);color:var(--fg)}
 .brand{display:flex;align-items:center;gap:10px;font:22px var(--display);letter-spacing:-.01em;padding:2px 4px 6px}
 .brand img{width:34px;height:34px;object-fit:contain}
-.add{position:relative;display:flex;gap:12px;align-items:center;padding:10px;border-radius:16px;border:1.5px dashed rgba(255,255,255,.22);cursor:pointer;transition:border-color .2s,background .2s}
+.add{position:relative;display:flex;gap:12px;align-items:center;padding:10px;border-radius:16px;border:1.5px dashed rgba(var(--fg-rgb),.22);cursor:pointer;transition:border-color .2s,background .2s}
 .add:hover,.add.over{border-color:var(--a1);background:color-mix(in srgb,var(--a1) 10%,transparent)}
 .add .plus{flex:none;width:40px;height:40px;border-radius:12px;background:var(--a1);color:var(--on-a1);display:grid;place-items:center;font:22px var(--display);transition:background .6s}
 .add b{display:block;font-weight:800}
 .add small{color:var(--dim);font-size:12px}
 .add input{position:absolute;inset:0;opacity:0;cursor:pointer}
-.find{background:rgba(255,255,255,.06);border:1px solid var(--line);border-radius:12px;padding:8px 12px;font-weight:600;outline:0;user-select:text}
+.find{background:rgba(var(--fg-rgb),.06);border:1px solid var(--line);border-radius:12px;padding:8px 12px;font-weight:600;outline:0;user-select:text}
 .find:focus{border-color:color-mix(in srgb,var(--a1) 60%,transparent)}
 .songs{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:2px;margin:0 -6px;padding:0 6px}
 .song{position:relative;display:grid;grid-template-columns:44px minmax(0,1fr) auto;gap:0 12px;align-items:center;padding:7px;border-radius:14px;cursor:pointer;animation:rise .45s var(--ease) both;animation-delay:calc(var(--i,0)*30ms)}
 .song:hover{background:var(--glass)}
 .song.on{background:var(--glass-2)}
 .song.on::before{content:"";position:absolute;left:-6px;top:12px;bottom:12px;width:4px;border-radius:4px;background:var(--a1)}
-.song img{grid-row:span 2;width:44px;height:44px;border-radius:10px;object-fit:cover;background:#1a1a22}
+.song img{grid-row:span 2;width:44px;height:44px;border-radius:10px;object-fit:cover;background:rgb(var(--bg-rgb))}
 .song b{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .song small{color:var(--dim);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .song .del{grid-row:span 2;width:30px;height:30px;border-radius:99px;color:var(--dim);display:grid;place-items:center;font-size:18px;line-height:1;opacity:0}
@@ -124,7 +130,7 @@ body.lib .scrim{opacity:1;pointer-events:auto}
 .meta{text-align:center;max-width:100%}
 .meta h1,.meta p{text-align:center}
 .seek{width:min(640px,100%)}
-.cover{position:relative;aspect-ratio:1;border-radius:24px;overflow:hidden;background:#17171b;transform:scale(calc(1 + var(--kick)*.035));box-shadow:0 24px 70px rgba(0,0,0,.45)}
+.cover{position:relative;aspect-ratio:1;border-radius:24px;overflow:hidden;background:rgb(var(--bg-rgb));transform:scale(calc(1 + var(--kick)*.035));box-shadow:0 24px 70px rgba(0,0,0,.45)}
 .cover img{width:100%;height:100%;object-fit:cover;display:block}
 .cover img[src^="icons/"]{object-fit:contain;padding:18%;box-sizing:border-box}
 .meta.swap>*{animation:rise .6s var(--ease) both}
@@ -132,14 +138,14 @@ body.lib .scrim{opacity:1;pointer-events:auto}
 .meta h1{font:clamp(24px,2.6vw,36px)/1.08 var(--display);letter-spacing:-.02em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .meta p{color:var(--dim);font-size:16px;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .seek{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:center;font:600 13px var(--ui);color:var(--dim);font-variant-numeric:tabular-nums}
-input[type=range]{appearance:none;height:6px;margin:0;border-radius:99px;background:linear-gradient(90deg,var(--a1) var(--pos,0%),rgba(255,255,255,.14) var(--pos,0%));cursor:pointer}
+input[type=range]{appearance:none;height:6px;margin:0;border-radius:99px;background:linear-gradient(90deg,var(--a1) var(--pos,0%),rgba(var(--fg-rgb),.14) var(--pos,0%));cursor:pointer}
 input[type=range]::-webkit-slider-thumb{appearance:none;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 0 0 4px color-mix(in srgb,var(--a1) 45%,transparent);transition:transform .2s var(--spring)}
 input[type=range]:hover::-webkit-slider-thumb{transform:scale(1.25)}
 .btns{display:flex;align-items:center;justify-content:center;gap:18px}
 .btns button{display:grid;place-items:center;border-radius:50%}
 .btns svg{width:26px;height:26px;fill:currentColor}
 .step{width:54px;height:54px;background:var(--glass-2);border:1px solid var(--line)}
-.step:hover{background:rgba(255,255,255,.17)}
+.step:hover{background:rgba(var(--fg-rgb),.17)}
 #play{width:74px;height:74px;background:var(--a1);color:var(--on-a1);transition:transform .25s var(--spring),background .6s,box-shadow .6s}
 #play svg{width:32px;height:32px}
 #play:hover{transform:scale(1.06)}
@@ -151,33 +157,33 @@ input[type=range]:hover::-webkit-slider-thumb{transform:scale(1.25)}
 /* ---------- слова: караоке ---------- */
 .lyr{position:relative;height:100%;min-height:0;overflow:hidden;-webkit-mask-image:linear-gradient(transparent,#000 22%,#000 70%,transparent);mask-image:linear-gradient(transparent,#000 22%,#000 70%,transparent)}
 .lines{position:absolute;left:0;right:0;top:44%;display:flex;flex-direction:column;gap:clamp(10px,1.6vh,20px);transition:transform .7s var(--ease)}
-.ln{font:800 calc(clamp(22px,2.7vw,42px) * var(--lyr-scale,1))/1.18 var(--ui);letter-spacing:-.015em;color:rgba(246,245,250,.28);text-wrap:balance;cursor:pointer;transform-origin:center;text-align:center;transition:color .4s,filter .5s,transform .6s var(--ease);filter:blur(1.5px)}
-.ln:hover{color:rgba(246,245,250,.55);filter:none}
-.ln.past{color:rgba(246,245,250,.4)}
-.ln.on{filter:none;transform:scale(1.04);color:transparent;background:linear-gradient(90deg,#fff calc(var(--p,0)*100%),rgba(255,255,255,.42) calc(var(--p,0)*100% + 8%));-webkit-background-clip:text;background-clip:text}
+.ln{font:800 calc(clamp(22px,2.7vw,42px) * var(--lyr-scale,1))/1.18 var(--ui);letter-spacing:-.015em;color:rgba(var(--fg-rgb),.28);text-wrap:balance;cursor:pointer;transform-origin:center;text-align:center;transition:color .4s,filter .5s,transform .6s var(--ease);filter:blur(1.5px)}
+.ln:hover{color:rgba(var(--fg-rgb),.55);filter:none}
+.ln.past{color:rgba(var(--fg-rgb),.4)}
+.ln.on{filter:none;transform:scale(1.04);color:transparent;background:linear-gradient(90deg,rgb(var(--fg-rgb)) calc(var(--p,0)*100%),rgba(var(--fg-rgb),.42) calc(var(--p,0)*100% + 8%));-webkit-background-clip:text;background-clip:text}
 .ln.gap{font-size:clamp(18px,2vw,28px);letter-spacing:.3em}
 .acts{display:flex;gap:8px;flex-wrap:wrap}
 .acts button{padding:12px 20px;border-radius:99px;font-weight:800;background:var(--glass-2);border:1px solid var(--line)}
-.acts button:hover{background:rgba(255,255,255,.17)}
+.acts button:hover{background:rgba(var(--fg-rgb),.17)}
 .acts button.main{background:var(--a1);color:var(--on-a1);border-color:transparent}
 /* разметка: подсвечена строка, которую ждём; пробел — в момент, когда её начинают петь */
 .syncing .ln{filter:none}
-.syncing .ln.next{color:#fff;transform:scale(1.04)}
+.syncing .ln.next{color:rgb(var(--fg-rgb));transform:scale(1.04)}
 .syncing .ln.next::after{content:"  ← пробел";font:700 .45em var(--ui);color:var(--a1);letter-spacing:.04em;vertical-align:middle}
 .syncBar{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
 .syncBar button{padding:10px 16px;border-radius:99px;font-weight:800;background:var(--glass-2);border:1px solid var(--line)}
 .syncBar .main{background:var(--a1);color:var(--on-a1);padding:14px 26px;font-size:16px}
 
 /* слова по словам: спетые загораются по одному */
-.ln.on.wl{color:rgba(255,255,255,.42);background:none;-webkit-background-clip:border-box;background-clip:border-box}
+.ln.on.wl{color:rgba(var(--fg-rgb),.42);background:none;-webkit-background-clip:border-box;background-clip:border-box}
 .ln .w{transition:color .18s,text-shadow .3s}
-.ln.on .w.sung{color:#fff;text-shadow:0 0 18px color-mix(in srgb,var(--a1) 55%,transparent)}
-.ln[contenteditable=true]{filter:none;color:#fff;outline:2px dashed color-mix(in srgb,var(--a1) 70%,transparent);outline-offset:6px;border-radius:8px;cursor:text;user-select:text;background:none;-webkit-background-clip:border-box}
+.ln.on .w.sung{color:rgb(var(--fg-rgb));text-shadow:0 0 18px color-mix(in srgb,var(--a1) 55%,transparent)}
+.ln[contenteditable=true]{filter:none;color:rgb(var(--fg-rgb));outline:2px dashed color-mix(in srgb,var(--a1) 70%,transparent);outline-offset:6px;border-radius:8px;cursor:text;user-select:text;background:none;-webkit-background-clip:border-box}
 .pill.ai{background:var(--a1);color:var(--on-a1);border-color:transparent}
 .pill.ai:hover{background:var(--a1);filter:brightness(1.1)}
 .field{display:flex;flex-direction:column;gap:6px;font-weight:700}
-.field select{background:rgba(255,255,255,.08);border:1px solid var(--line);border-radius:12px;padding:9px 12px;font:600 14px var(--ui);color:var(--fg)}
-.field select option{background:#16161e}
+.field select{background:rgba(var(--fg-rgb),.08);border:1px solid var(--line);border-radius:12px;padding:9px 12px;font:600 14px var(--ui);color:var(--fg)}
+.field select option{background:rgb(var(--bg-rgb))}
 
 /* волна вместо полоски: сыгранная часть в цвете песни */
 .wave{position:relative;height:42px}
@@ -225,7 +231,7 @@ input[type=range]:hover::-webkit-slider-thumb{transform:scale(1.25)}
 .mos svg{width:20px;height:20px;fill:none;stroke:#fff;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .song[draggable=true]{-webkit-user-drag:element}
 /* меню по правой кнопке */
-.menu{position:fixed;z-index:25;min-width:210px;max-width:300px;padding:6px;border-radius:16px;background:rgba(24,24,32,.94);border:1px solid var(--line);box-shadow:0 20px 60px rgba(0,0,0,.5);backdrop-filter:blur(20px);animation:pop .25s var(--spring) both;display:flex;flex-direction:column}
+.menu{position:fixed;z-index:25;min-width:210px;max-width:300px;padding:6px;border-radius:16px;background:rgba(var(--bg-rgb),.94);border:1px solid var(--line);box-shadow:0 20px 60px rgba(0,0,0,.5);backdrop-filter:blur(20px);animation:pop .25s var(--spring) both;display:flex;flex-direction:column}
 .menu p{padding:8px 10px 2px;color:var(--dim);font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
 .menu button{text-align:left;padding:9px 12px;border-radius:10px;font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .menu button:hover{background:var(--glass-2)}
@@ -233,15 +239,15 @@ input[type=range]:hover::-webkit-slider-thumb{transform:scale(1.25)}
 
 /* настройки фона */
 .bgCard{max-height:calc(100vh - 32px);overflow:auto}
-.seg{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;padding:4px;border-radius:16px;background:rgba(255,255,255,.06)}
+.seg{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;padding:4px;border-radius:16px;background:rgba(var(--fg-rgb),.06)}
 .seg button{padding:10px 8px;border-radius:12px;font-weight:700;font-size:14px;color:var(--dim)}
 .seg button:hover{color:var(--fg)}
 .seg button.on{background:var(--a1);color:var(--on-a1)}
 .thumbs{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:8px}
-.thumb{position:relative;aspect-ratio:16/10;border-radius:12px;background:center/cover #1a1a22;overflow:hidden}
+.thumb{position:relative;aspect-ratio:16/10;border-radius:12px;background:center/cover rgb(var(--bg-rgb));overflow:hidden}
 .thumb button{position:absolute;top:4px;right:4px;width:24px;height:24px;border-radius:50%;background:rgba(0,0,0,.6);font-weight:800;opacity:0}
 .thumb:hover button,.thumb button:focus-visible{opacity:1}
-.addT{display:grid;place-items:center;border:1.5px dashed rgba(255,255,255,.25);background:none;font:24px var(--display);color:var(--dim)}
+.addT{display:grid;place-items:center;border:1.5px dashed rgba(var(--fg-rgb),.25);background:none;font:24px var(--display);color:var(--dim)}
 .addT:hover{border-color:var(--a1);color:var(--a1)}
 .rng{display:grid;gap:6px;font-weight:700}
 .rng span{display:flex;justify-content:space-between}
@@ -249,24 +255,24 @@ input[type=range]:hover::-webkit-slider-thumb{transform:scale(1.25)}
 .cols{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .cols input{width:46px;height:46px;border:0;border-radius:14px;padding:0;background:none;cursor:pointer}
 .cols input::-webkit-color-swatch-wrapper{padding:0}
-.cols input::-webkit-color-swatch{border:2px solid rgba(255,255,255,.2);border-radius:14px}
+.cols input::-webkit-color-swatch{border:2px solid rgba(var(--fg-rgb),.2);border-radius:14px}
 .chipB{padding:10px 14px;border-radius:99px;background:var(--glass-2);font-weight:700;font-size:13px}
 .chipB.on{background:var(--a1);color:var(--on-a1)}
 .chk{display:flex;align-items:center;gap:10px;font-weight:700;cursor:pointer}
 .chk input{position:absolute;opacity:0}
-.chk span{flex:none;width:40px;height:24px;border-radius:99px;background:rgba(255,255,255,.14);position:relative;transition:background .25s}
+.chk span{flex:none;width:40px;height:24px;border-radius:99px;background:rgba(var(--fg-rgb),.14);position:relative;transition:background .25s}
 .chk span::after{content:"";position:absolute;left:3px;top:3px;width:18px;height:18px;border-radius:50%;background:#fff;transition:transform .3s var(--spring)}
 .chk input:checked+span{background:var(--a1)}
 .chk input:checked+span::after{transform:translateX(16px)}
 .chk input:focus-visible+span{outline:2px solid var(--a1);outline-offset:3px}
 
 /* жидкое стекло: тонкая подложка, блик по кромке; само преломление делает фильтр из app.js */
-body.liquid .lg{background:rgba(255,255,255,.035);border-color:transparent;box-shadow:inset 1.5px 1.5px 0 -0.5px rgba(255,255,255,.55),inset -1px -1px 0 -0.5px rgba(255,255,255,.25),inset 0 0 22px rgba(255,255,255,.07),0 12px 34px rgba(0,0,0,.28)}
-body.liquid .pill.lg:hover,body.liquid .step.lg:hover{background:rgba(255,255,255,.1)}
+body.liquid .lg{background:rgba(var(--fg-rgb),.035);border-color:transparent;box-shadow:inset 1.5px 1.5px 0 -0.5px rgba(var(--fg-rgb),.55),inset -1px -1px 0 -0.5px rgba(var(--fg-rgb),.25),inset 0 0 22px rgba(var(--fg-rgb),.07),0 12px 34px rgba(0,0,0,.28)}
+body.liquid .pill.lg:hover,body.liquid .step.lg:hover{background:rgba(var(--fg-rgb),.1)}
 body.liquid .pill.ai.lg{background:color-mix(in srgb,var(--a1) 78%,transparent)}
-body.liquid .card.lg{background:rgba(20,20,28,.42)}
-body.liquid .menu.lg{background:rgba(20,20,28,.5)}
-body.liquid .over{backdrop-filter:blur(6px);background:rgba(6,6,9,.35)}
+body.liquid .card.lg{background:rgba(var(--bg-rgb),.62)}
+body.liquid .menu.lg{background:rgba(var(--bg-rgb),.7)}
+body.liquid .over{backdrop-filter:blur(6px);background:rgba(var(--shade-rgb),.35)}
 
 .card h4{margin:8px 0 -4px;font:18px var(--display);color:var(--fg)}
 .keys{font-size:13px}
@@ -275,31 +281,32 @@ body.liquid .over{backdrop-filter:blur(6px);background:rgba(6,6,9,.35)}
 .mode.kar{padding:0 12px}
 
 .icos{display:flex;flex-wrap:wrap;gap:8px}
-.icoB{width:52px;height:52px;border-radius:14px;padding:4px;background:rgba(255,255,255,.05);border:2px solid transparent}
+.icoB{width:52px;height:52px;border-radius:14px;padding:4px;background:rgba(var(--fg-rgb),.05);border:2px solid transparent}
 .icoB img{width:100%;height:100%;object-fit:contain}
-.icoB:hover{background:rgba(255,255,255,.1)}
+.icoB:hover{background:rgba(var(--fg-rgb),.1)}
 .icoB.on{border-color:var(--a1)}
 
 /* стиль текста «перелив»: название, имя песни и спетые слова — градиентом, который медленно бежит */
 @keyframes shim{to{background-position:-200% 0}}
 .txDemo{font:26px var(--display);margin-left:8px}
 :root.txg .meta h1,:root.txg .brandBtn span,:root.txg .txDemo,:root.txg .ln.on .w.sung,:root.txg .ln.on:not(.wl){background:linear-gradient(90deg,var(--t1),var(--t2),var(--t1));background-size:200% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:shim 4s linear infinite;text-shadow:none;filter:drop-shadow(0 2px 0 rgba(0,0,0,.45)) drop-shadow(0 0 12px color-mix(in srgb,var(--t1) 40%,transparent))}
-:root.txg .ln.on:not(.wl){background-image:linear-gradient(90deg,var(--t1),var(--t2) calc(var(--p,0)*100%),rgba(255,255,255,.42) calc(var(--p,0)*100% + 8%));background-size:100% 100%;animation:none}
+:root.txg .ln.on:not(.wl){background-image:linear-gradient(90deg,var(--t1),var(--t2) calc(var(--p,0)*100%),rgba(var(--fg-rgb),.42) calc(var(--p,0)*100% + 8%));background-size:100% 100%;animation:none}
 
 /* окна */
-.over{position:fixed;inset:0;display:grid;place-items:center;padding:16px;background:rgba(6,6,9,.6);backdrop-filter:blur(14px);animation:fade .25s both;z-index:20}
-.card{background:rgba(22,22,30,.86);border:1px solid var(--line);border-radius:28px;padding:28px;width:min(560px,100%);display:flex;flex-direction:column;gap:14px;animation:pop .45s var(--spring) both;box-shadow:0 40px 100px rgba(0,0,0,.5)}
+.over{position:fixed;inset:0;display:grid;place-items:center;padding:16px;background:rgba(var(--shade-rgb),.6);backdrop-filter:blur(14px);animation:fade .25s both;z-index:20}
+.card{background:rgba(var(--bg-rgb),.9);border:1px solid var(--line);border-radius:28px;padding:28px;width:min(560px,100%);display:flex;flex-direction:column;gap:14px;animation:pop .45s var(--spring) both;box-shadow:0 40px 100px rgba(0,0,0,.5)}
 .card h3{font:26px var(--display);letter-spacing:-.01em}
 .card p{color:var(--dim)}
-.card textarea{min-height:240px;resize:vertical;background:rgba(255,255,255,.06);border:1px solid var(--line);border-radius:14px;padding:12px;color:var(--fg);font:500 14px/1.5 var(--ui);user-select:text;outline:0}
-.bar{height:8px;border-radius:99px;background:rgba(255,255,255,.08);overflow:hidden}
+.card textarea{min-height:240px;resize:vertical;background:rgba(var(--fg-rgb),.06);border:1px solid var(--line);border-radius:14px;padding:12px;color:var(--fg);font:500 14px/1.5 var(--ui);user-select:text;outline:0}
+.bar{height:8px;border-radius:99px;background:rgba(var(--fg-rgb),.08);overflow:hidden}
 .bar i{display:block;height:100%;width:0;border-radius:99px;background:var(--a1);transition:width .2s}
-.toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);padding:10px 18px;border-radius:99px;background:rgba(22,22,30,.92);border:1px solid var(--line);font-weight:700;z-index:30;animation:pop .35s var(--spring) both}
+.toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);padding:10px 18px;border-radius:99px;background:rgba(var(--bg-rgb),.92);border:1px solid var(--line);font-weight:700;z-index:30;animation:pop .35s var(--spring) both}
 
 /* широкое окно: список песен всегда слева, плеер — по центру оставшегося места */
 @media (min-width:1200px){
   .side{transform:none;box-shadow:none;transition:transform .32s cubic-bezier(.23,1,.32,1)}
-  .app{left:340px;transition:left .32s cubic-bezier(.23,1,.32,1)}
+  .app{left:340px;padding-left:40px;transition:left .32s cubic-bezier(.23,1,.32,1)}
+  body.libHide .app{padding-left:24px}
   .scrim,#libClose{display:none}
   body.libHide .side{transform:translateX(-102%)}
   body.libHide .app{left:0}
@@ -413,6 +420,8 @@ body.liquid .over{backdrop-filter:blur(6px);background:rgba(6,6,9,.35)}
     <label class="chk"><input type="checkbox" id="bgReact"><span></span>Фон дышит под бас</label>
     <div class="acts"><button id="bgSong">Своя картинка для этой песни</button></div>
     <h4>Вид</h4>
+    <div class="field">Тема<div class="seg" id="themeSeg"><button data-th="dark">Тёмная</button><button data-th="light">Светлая</button><button data-th="auto">Как в Windows</button></div></div>
+    <label class="rng"><span>Прозрачность списка песен <b id="sideAV"></b></span><input type="range" id="sideA" min="0.2" max="1" step="0.05"></label>
     <div class="field pcOnly">Иконка Linea<div class="icos" id="icos"><button class="icoB" data-ico="grey" title="Серый"><img src="icons/grey.png" alt="Серый"></button><button class="icoB" data-ico="white" title="Белый"><img src="icons/white.png" alt="Белый"></button><button class="icoB" data-ico="ice" title="Лёд"><img src="icons/ice.png" alt="Лёд"></button><button class="icoB" data-ico="lime" title="Лайм"><img src="icons/lime.png" alt="Лайм"></button><button class="icoB" data-ico="sunset" title="Закат"><img src="icons/sunset.png" alt="Закат"></button><button class="icoB" data-ico="red" title="Красный"><img src="icons/red.png" alt="Красный"></button><button class="icoB" data-ico="gold" title="Золото"><img src="icons/gold.png" alt="Золото"></button></div></div>
     <div class="ovRow"><span>Цвет кнопок и волны</span><span class="cols"><button class="chipB" id="accAuto">Из обложки</button><input type="color" id="accCol" aria-label="Свой цвет"></span></div>
     <div class="field">Стиль текста

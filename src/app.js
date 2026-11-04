@@ -433,6 +433,8 @@ function renderBgDlg() {
   $('accCol').value = settings.accent || (cur && cur.pal ? cur.pal[0] : '#d4d4da');
   $('lyrSize').value = settings.lyrScale || 1; $('lyrSizeV').textContent = Math.round((settings.lyrScale || 1) * 100) + '%';
   $('trayOn').checked = settings.tray !== false;
+  document.querySelectorAll('#themeSeg button').forEach((b) => b.classList.toggle('on', b.dataset.th === (settings.theme || 'dark')));
+  $('sideA').value = settings.sideA || 0.55; $('sideAV').textContent = Math.round((1 - (settings.sideA || 0.55)) * 100) + '%';
   document.querySelectorAll('#txMode button').forEach((b) => b.classList.toggle('on', b.dataset.t === (settings.tx || 'plain')));
   $('txCols').hidden = (settings.tx || 'plain') === 'plain';
   $('tx1').hidden = $('tx2').hidden = settings.tx !== 'own';
@@ -881,7 +883,7 @@ function drawWave() {
   for (let k = 0; k < n; k++) {
     const amp = wave ? wave[Math.floor((k / n) * wave.length)] : 0.3;
     const bh = Math.max(3, amp * (h - 4)), bx = k * (bw + gap);
-    x.fillStyle = bx + bw / 2 <= px ? a1 : 'rgba(255,255,255,.22)';
+    x.fillStyle = bx + bw / 2 <= px ? a1 : `rgba(${fgRGB()},.22)`;
     x.beginPath();
     x.roundRect(bx, (h - bh) / 2, bw, bh, 1.5);
     x.fill();
@@ -1055,7 +1057,7 @@ function fxFrame(now) {
   fxG.clearRect(0, 0, fxW, fxH);
   if (mode === 'off') return;
   const boost = 1 + kick * 1.8; // на ударах баса частицы чуть ускоряются и ярче
-  const col = mode === 'dust' ? getComputedStyle(document.documentElement).getPropertyValue('--a1').trim() || '#fff' : '#fff';
+  const col = mode === 'dust' ? getComputedStyle(document.documentElement).getPropertyValue('--a1').trim() || '#fff' : themeNow() === 'light' ? `rgb(${fgRGB()})` : '#fff';
   fxG.fillStyle = col;
   for (const p of fxParts) {
     p.ph += dt * 0.8;
@@ -1141,6 +1143,20 @@ function applyTx() {
 document.querySelectorAll('#txMode button').forEach((b) => b.addEventListener('click', () => { settings.tx = b.dataset.t; saveSettings(); applyTx(); renderBgDlg(); }));
 for (const id of ['tx1', 'tx2']) $(id).addEventListener('input', () => { settings[id] = $(id).value; saveSettings(); applyTx(); });
 applyTx();
+
+// ==================== тема и прозрачность списка ====================
+const sysLight = matchMedia('(prefers-color-scheme: light)');
+const themeNow = () => (settings.theme === 'auto' ? (sysLight.matches ? 'light' : 'dark') : settings.theme || 'dark');
+const fgRGB = () => getComputedStyle(document.documentElement).getPropertyValue('--fg-rgb').trim() || '246,245,250';
+function applyTheme() {
+  document.documentElement.dataset.theme = themeNow();
+  document.documentElement.style.setProperty('--side-a', settings.sideA || 0.55);
+  waveDirty = true;
+}
+sysLight.addEventListener('change', applyTheme);
+document.querySelectorAll('#themeSeg button').forEach((b) => b.addEventListener('click', () => { settings.theme = b.dataset.th; saveSettings(); applyTheme(); renderBgDlg(); }));
+$('sideA').addEventListener('input', () => { settings.sideA = Number($('sideA').value); saveSettings(); $('sideAV').textContent = Math.round((1 - settings.sideA) * 100) + '%'; applyTheme(); });
+applyTheme();
 // ==================== кадр: перемотка, бас, строка ====================
 function frame(now) {
   requestAnimationFrame(frame);
