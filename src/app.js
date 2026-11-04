@@ -958,7 +958,7 @@ setInterval(() => {
     const lt = audio.currentTime * 1000 - (cur.lyrOff || 0), i = lineAt(L, lt);
     if (i >= 0) {
       const l = L[i], nx = L.slice(i + 1).find((x) => x.text);
-      st = { i, text: l.text, next: nx ? nx.text : '', color: (cur.pal || [])[0], grad: (settings.tx || 'plain') !== 'plain' ? txColors() : null };
+      st = { i, text: l.text, next: nx ? nx.text : '', color: (cur.pal || [])[0] };
       if (l.words) { st.words = l.words.map((w) => w.text); st.sung = l.words.filter((w) => w.t <= lt).length; }
       else { const end = i + 1 < L.length ? L[i + 1].t : l.t + 4000; st.p = Math.min(1, (lt - l.t) / Math.max(400, Math.min(end - l.t, 7000) * 0.85)); }
     }
