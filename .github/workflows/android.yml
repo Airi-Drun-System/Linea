@@ -51,8 +51,10 @@ jobs:
         env:
           KS: ${{ secrets.LN_DEBUG_KEYSTORE }}
         run: |
-          test -n "$KS" || { echo "Нет секрета LN_DEBUG_KEYSTORE"; exit 1; }
+          # без ключа сборка только проверяется и не выкладывается
+          if [ -z "$KS" ]; then echo "::warning::Нет секрета LN_DEBUG_KEYSTORE"; echo "HAS_KEY=false" >> $GITHUB_ENV; exit 0; fi
           mkdir -p ~/.android && echo "$KS" | base64 -d > ~/.android/debug.keystore
+          echo "HAS_KEY=true" >> $GITHUB_ENV
       - run: npx cap sync android
       - run: ./gradlew assembleDebug --no-daemon
         working-directory: android
@@ -60,6 +62,7 @@ jobs:
           cp android/app/build/outputs/apk/debug/app-debug.apk Linea-android.apk
           echo "{\"build\": $LN_BUILD, \"version\": \"$LN_VERSION\"}" > android.json
       - uses: softprops/action-gh-release@v2
+        if: env.HAS_KEY == 'true'
         with:
           tag_name: android
           name: Linea — Android
