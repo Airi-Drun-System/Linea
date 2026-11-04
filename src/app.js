@@ -871,39 +871,19 @@ async function waveOf(song) {
 // полоса перемотки: сыгранная часть — живая волна (как загрузка в Google Play), по ней бежит котокролик;
 // под мышкой полоса плавно «вырастает» в столбики битов
 let waveMorph = 0, waveHover = false, waveAmp = 0, waveLast = performance.now(), wavePhase = 0;
-const CR = { fur: '#E7A15A', dark: '#C9783A', cream: '#F7DDB8', ear: '#D98E4C', eye: '#1E1612', nose: '#E8A0A0' };
-// котокролик сбоку: рыжий, уши висят и хлопают на бегу; t — время, run — бежит или сидит
+// котокролик — та самая фотка, вырезанная из фона; на бегу подпрыгивает и чуть сплющивается при приземлении
+const crImg = new Image();
+crImg.src = 'cr.png';
 function drawCatRabbit(x, cx, gy, t, run) {
-  const k = run ? Math.sin(t * 18) : 0, bob = run ? -Math.abs(Math.sin(t * 18)) * 2.2 : 0;
+  if (!crImg.complete || !crImg.naturalWidth) return;
+  const H = 30, W = (H * crImg.naturalWidth) / crImg.naturalHeight;
+  const ph = (t * 3.2) % 1, hop = run ? Math.sin(ph * Math.PI) : 0; // один прыжок за ~0.3 с
+  const squash = run ? 1 - 0.12 * Math.max(0, 1 - hop * 4) : 1;
   x.save();
-  x.translate(cx, gy + bob);
-  // лапки: на бегу перебирают, сидя — поджаты
-  x.fillStyle = CR.dark;
-  const legs = run ? [[-6, k], [-2, -k], [4, -k], [8, k]] : [[-5, 0], [6, 0]];
-  for (const [lx, ph] of legs) { x.beginPath(); x.ellipse(lx + ph * 2.2, -1.6, 2.1, 2.4, 0, 0, 6.283); x.fill(); }
-  // хвостик-помпон
-  x.fillStyle = CR.cream; x.beginPath(); x.arc(-11.5, -9, 2.8, 0, 6.283); x.fill();
-  // туловище и светлое брюшко
-  x.fillStyle = CR.fur; x.beginPath(); x.ellipse(-1, -8.5, 10.5, 7.2, 0, 0, 6.283); x.fill();
-  x.fillStyle = CR.cream; x.beginPath(); x.ellipse(1, -5.2, 7, 3.4, 0, 0, 6.283); x.fill();
-  // полоски на спине
-  x.strokeStyle = CR.dark; x.lineWidth = 1.3; x.lineCap = 'round';
-  for (const sx of [-6, -2, 2]) { x.beginPath(); x.moveTo(sx, -15); x.lineTo(sx + 1.2, -12); x.stroke(); }
-  // голова
-  x.fillStyle = CR.fur; x.beginPath(); x.arc(8.5, -15, 7, 0, 6.283); x.fill();
-  x.fillStyle = CR.cream; x.beginPath(); x.ellipse(11.6, -12.6, 3.4, 2.6, 0, 0, 6.283); x.fill();
-  x.strokeStyle = CR.dark; x.beginPath(); x.moveTo(7, -21.2); x.lineTo(7.8, -18.6); x.moveTo(9.6, -21.6); x.lineTo(9.8, -18.8); x.stroke();
-  // вислые уши свисают по бокам головы и хлопают на бегу
-  const flap = run ? Math.sin(t * 18 + 1) * 0.3 : 0;
-  x.strokeStyle = CR.dark; x.lineWidth = 0.8;
-  x.fillStyle = CR.dark; x.save(); x.translate(9.5, -20); x.rotate(0.15 + flap * 0.6);
-  x.beginPath(); x.ellipse(0.5, 6.5, 2.6, 7.2, 0, 0, 6.283); x.fill(); x.restore();
-  x.fillStyle = CR.ear; x.save(); x.translate(6.2, -20.5); x.rotate(0.35 + flap);
-  x.beginPath(); x.ellipse(-0.5, 7, 3.4, 8, 0, 0, 6.283); x.fill(); x.stroke(); x.restore();
-  // глаз, блик и розовый нос
-  x.fillStyle = CR.eye; x.beginPath(); x.arc(11, -16, 1.7, 0, 6.283); x.fill();
-  x.fillStyle = '#fff'; x.beginPath(); x.arc(11.5, -16.6, 0.55, 0, 6.283); x.fill();
-  x.fillStyle = CR.nose; x.beginPath(); x.arc(14.6, -13.6, 1.1, 0, 6.283); x.fill();
+  x.translate(cx, gy - hop * 7);
+  x.rotate(run ? (hop - 0.5) * -0.12 : 0);
+  x.scale(1 / squash, squash);
+  x.drawImage(crImg, -W / 2, -H, W, H);
   x.restore();
 }
 function drawWave() {
