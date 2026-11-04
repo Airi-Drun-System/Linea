@@ -44,5 +44,8 @@ g = g.replace('android {', `android {
             }
         }
     }`);
+// MediaSession и плеер в шторке
+must((g.match(/dependencies \{/g) || []).length === 1, 'dependencies');
+g = g.replace('dependencies {', "dependencies {\n    implementation 'androidx.media:media:1.7.0'");
 fs.writeFileSync(gf, g);
 console.log('android пропатчен', code, name);

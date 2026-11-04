@@ -954,6 +954,7 @@ async function load(song, autoplay) {
   applyPalette(song);
   waveDirty = true;
   $('coverImg').src = song.imgUrl;
+  mediaPush(); // теперь есть обложка
   applyBg();
   applyTx();
   if (window.MediaMetadata) navigator.mediaSession.metadata = new MediaMetadata({ title: song.name, artist: song.artist || '', artwork: [{ src: song.imgUrl }] });
@@ -984,11 +985,11 @@ function setVolume(v) {
 }
 // события слушаем у обеих дек, но реагируем только на текущую
 // телефон: уведомление с названием и кнопками, пока играет музыка
-const mediaPush = () => { if (cur && window.lnApp && window.lnApp.media) window.lnApp.media({ title: cur.name, artist: cur.artist || '', playing: !audio.paused }); };
+const mediaPush = () => { if (cur && window.lnApp && window.lnApp.media) window.lnApp.media({ id: cur.id, title: cur.name, artist: cur.artist || '', playing: !audio.paused, pos: audio.currentTime || 0, dur: audio.duration || cur.duration / 1000 || 0, img: cur.img }); };
 const onDeck = (ev, fn) => [...decks, net].forEach((d) => d.addEventListener(ev, (e) => { if (e.target === audio) fn(e); }));
 let xfading = false;
 onDeck('play', () => { vSync(true); mediaPush();  $('play').querySelector('path').setAttribute('d', PATH.pause); $('play').ariaLabel = 'Пауза'; });
-onDeck('seeked', () => vSync(true));
+onDeck('seeked', () => { vSync(true); mediaPush(); });
 onDeck('ratechange', () => vSync(false));
 onDeck('pause', () => { vSync(false); mediaPush();  $('play').querySelector('path').setAttribute('d', PATH.play); $('play').ariaLabel = 'Играть'; });
 // за несколько секунд до конца начинаем следующую — получается переход без тишины
@@ -1315,7 +1316,7 @@ async function setGlobalKeys(on, quiet) {
   const ok = await window.lnApp.globalKeys(on);
   if (on && !ok && !quiet) toast('Стрелки уже заняты другой программой');
 }
-if (window.lnApp && window.lnApp.onStep) window.lnApp.onStep((d) => (d === 'trayTold' ? (settings.trayTold = true, saveSettings()) : d === 'already' ? toast('Linea уже открыта — вот она') : d === 'play' ? play() : d === 'pause' ? audio.pause() : d === 'toggle' ? toggle() : step(d)));
+if (window.lnApp && window.lnApp.onStep) window.lnApp.onStep((d) => (d === 'trayTold' ? (settings.trayTold = true, saveSettings()) : d === 'already' ? toast('Linea уже открыта — вот она') : d === 'play' ? play() : d === 'pause' ? audio.pause() : d === 'toggle' ? toggle() : String(d).startsWith('seek:') ? (audio.currentTime = Number(String(d).slice(5)) / 1000) : step(d)));
 
 let ovMove = false, ovLast = '';
 function ovApply() { if (window.lnApp && window.lnApp.overlay) window.lnApp.overlay({ on: !!settings.overlay, move: ovMove }); }

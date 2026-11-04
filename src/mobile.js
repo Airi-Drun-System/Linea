@@ -16,7 +16,7 @@
   };
   const OEMBED = { yt: 'https://www.youtube.com/oembed?format=json&url=', sc: 'https://soundcloud.com/oembed?format=json&url=' };
   const SITES = { sc: 'https://soundcloud.com/discover', yt: 'https://m.youtube.com/' };
-  let updReady = null;
+  let updReady = null, artId = '', art = '';
   const updListeners = [];
   async function updCheck() {
     try {
@@ -51,7 +51,19 @@
       fn(c === 'next' ? 1 : c === 'prev' ? -1 : c);
     }),
     // уведомление с кнопками и работа в фоне, пока что-то играет
-    media: (st) => L.playing(st).catch(() => {}),
+    media: (st) => {
+      // обложка для шторки и экрана блокировки: квадрат 256×256, считаем один раз на песню
+      if (st.img && st.id !== artId) {
+        try {
+          const c = document.createElement('canvas'), w = st.img.naturalWidth, h = st.img.naturalHeight, m = Math.min(w, h);
+          c.width = c.height = 256;
+          c.getContext('2d').drawImage(st.img, (w - m) / 2, (h - m) / 2, m, m, 0, 0, 256, 256);
+          art = c.toDataURL('image/jpeg', 0.85).split(',')[1];
+          artId = st.id;
+        } catch { art = ''; }
+      }
+      return L.playing({ title: st.title, artist: st.artist, playing: st.playing, pos: Math.round(st.pos * 1000), dur: Math.round(st.dur * 1000), art: st.id === artId ? art : '' }).catch(() => {});
+    },
     updState: async () => ({ version: window.LN_VERSION || 'Android', ready: updReady, can: true }),
     updCheck,
     updInstall: () => window.open(REL + 'Linea-android.apk', '_blank'),

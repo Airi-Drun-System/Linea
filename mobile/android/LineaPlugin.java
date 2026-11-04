@@ -45,6 +45,9 @@ public class LineaPlugin extends Plugin {
         i.putExtra("title", call.getString("title", "Linea"));
         i.putExtra("artist", call.getString("artist", ""));
         i.putExtra("playing", Boolean.TRUE.equals(call.getBoolean("playing", false)));
+        i.putExtra("pos", call.getDouble("pos", 0.0).longValue());
+        i.putExtra("dur", call.getDouble("dur", 0.0).longValue());
+        i.putExtra("art", call.getString("art", ""));
         try {
             ContextCompat.startForegroundService(getContext(), i);
         } catch (Exception e) {
