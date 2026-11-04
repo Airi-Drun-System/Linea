@@ -1,16 +1,22 @@
 package com.vegasdev.linea;
 
 import android.Manifest;
+import android.app.Activity;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.net.Uri;
 import android.os.Build;
+import android.util.Base64;
+import androidx.activity.result.ActivityResult;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
+import com.getcapacitor.annotation.ActivityCallback;
 import com.getcapacitor.annotation.CapacitorPlugin;
+import java.io.OutputStream;
 
 // мост страница ↔ Android: ссылки из «Поделиться», кнопки уведомления, «Назад», музыка в фоне
 @CapacitorPlugin(name = "Linea")
@@ -54,6 +60,53 @@ public class LineaPlugin extends Plugin {
             // Android не даёт запускать службу из фона — уведомление обновится, когда вернёшься в Linea
         }
         call.resolve();
+    }
+
+    // «Перенос»: куда сохранить файл, спрашивает сам Android — разрешения на память не нужны
+    private OutputStream out;
+
+    @PluginMethod
+    public void saveOpen(PluginCall call) {
+        Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("application/octet-stream");
+        i.putExtra(Intent.EXTRA_TITLE, call.getString("name", "Linea.linea"));
+        startActivityForResult(call, i, "saveOpened");
+    }
+
+    @ActivityCallback
+    private void saveOpened(PluginCall call, ActivityResult r) {
+        if (call == null) return;
+        Uri uri = r.getResultCode() == Activity.RESULT_OK && r.getData() != null ? r.getData().getData() : null;
+        try {
+            out = uri == null ? null : getContext().getContentResolver().openOutputStream(uri);
+        } catch (Exception e) {
+            out = null;
+        }
+        JSObject o = new JSObject();
+        o.put("ok", out != null);
+        call.resolve(o);
+    }
+
+    // файл приходит кусками в base64: целиком через мост большой не пролез бы
+    @PluginMethod
+    public void saveWrite(PluginCall call) {
+        try {
+            out.write(Base64.decode(call.getString("b64", ""), Base64.DEFAULT));
+            call.resolve();
+        } catch (Exception e) {
+            call.reject("Не записалось");
+        }
+    }
+
+    @PluginMethod
+    public void saveClose(PluginCall call) {
+        try {
+            if (out != null) out.close();
+            call.resolve();
+        } catch (Exception e) {
+            call.reject("Не записалось");
+        } finally {
+            out = null;
+        }
     }
 
     @PluginMethod

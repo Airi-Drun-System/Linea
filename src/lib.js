@@ -202,4 +202,8 @@ async function lrclibFind(getJson, q) {
     return plain ? { plain } : null;
   } catch { return null; }
 }
-if (typeof module !== 'undefined') module.exports = { lrclibFind, hashStr, rng, fmtDur, cleanName, parseLRC, lineAt, retextLine, peaks, voiceEnv, autoLyrics, loudness, normDb, parseNetUrl, splitTitle };
+// перенос .linea: свой файл на другом устройстве получает другой id (в нём дата файла), поэтому дубль узнаём
+// и по названию, исполнителю и длине; песни по ссылке пускаем только с настоящим адресом YouTube или SoundCloud
+const sameSong = (a, b) => a.id === b.id || (!a.kind && !b.kind && a.name === b.name && (a.artist || '') === (b.artist || '') && Math.abs((a.duration || 0) - (b.duration || 0)) < 1500);
+const netOk = (r) => (r.kind === 'yt' ? /^[\w-]{11}$/.test(r.vid) : r.kind === 'sc' ? /^https:\/\/([a-z0-9-]+\.)?soundcloud\.com\//.test(r.url) : !r.kind);
+if (typeof module !== 'undefined') module.exports = { lrclibFind, hashStr, rng, fmtDur, cleanName, parseLRC, lineAt, retextLine, peaks, voiceEnv, autoLyrics, loudness, normDb, sameSong, netOk, parseNetUrl, splitTitle };

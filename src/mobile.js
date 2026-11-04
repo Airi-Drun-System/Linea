@@ -67,6 +67,19 @@
       }
       return L.playing({ title: st.title, artist: st.artist, playing: st.playing, pos: Math.round(st.pos * 1000), dur: Math.round(st.dur * 1000), art: st.id === artId ? art : '' }).catch(() => {});
     },
+    // «Перенос»: куда сохранить, спрашивает Android; файл передаём кусками — со своими песнями он бывает большим
+    saveFile: async (name, blob, progress) => {
+      const r = await L.saveOpen({ name });
+      if (!r || !r.ok) return false;
+      try {
+        for (let at = 0; at < blob.size; at += 1 << 19) {
+          progress(at / blob.size);
+          const b64 = await new Promise((res, rej) => { const f = new FileReader(); f.onload = () => res(String(f.result).split(',')[1] || ''); f.onerror = rej; f.readAsDataURL(blob.slice(at, at + (1 << 19))); });
+          await L.saveWrite({ b64 });
+        }
+      } finally { await L.saveClose(); }
+      return true;
+    },
     updState: async () => ({ version: window.LN_VERSION || 'Android', ready: updReady, can: true }),
     updCheck,
     updInstall: () => window.open(REL + 'Linea-android.apk', '_blank'),

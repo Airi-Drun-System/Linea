@@ -1,6 +1,6 @@
 'use strict';
 const assert = require('assert');
-const { parseLRC, lineAt, fmtDur, cleanName, retextLine, peaks, voiceEnv, autoLyrics, loudness, normDb, parseNetUrl, splitTitle, lrclibFind } = require('../src/lib.js');
+const { parseLRC, lineAt, fmtDur, cleanName, retextLine, peaks, voiceEnv, autoLyrics, loudness, normDb, sameSong, netOk, parseNetUrl, splitTitle, lrclibFind } = require('../src/lib.js');
 
 const L = parseLRC('[ar:x]\n[00:01.50]раз\n[00:00.20][00:03.00]два\nбез метки\n[01:02.5]три');
 assert.deepStrictEqual(L.map((l) => [Math.round(l.t), l.text]), [[200, 'два'], [1500, 'раз'], [3000, 'два'], [62500, 'три']]);
@@ -81,6 +81,15 @@ assert.strictEqual(normDb(-20, -8), 6);
 assert.strictEqual(normDb(-20, -1), 0);
 assert.strictEqual(normDb(-17, -6), 3);
 assert.strictEqual(normDb(0, 0), -12);
+// перенос: свой файл с другим id, но тем же названием и длиной — дубль; ссылки — только настоящие
+const own = { id: 'f1', name: 'Песня', artist: 'А', duration: 180000 };
+assert.ok(sameSong(own, { id: 'f2', name: 'Песня', artist: 'А', duration: 180900 }));
+assert.ok(!sameSong(own, { id: 'f2', name: 'Песня', artist: 'А', duration: 185000 }));
+assert.ok(!sameSong(own, { id: 'f2', name: 'Песня', artist: 'Б', duration: 180000 }));
+assert.ok(!sameSong({ id: 'yt1', kind: 'yt', name: 'Песня', duration: 1 }, { id: 'yt2', kind: 'yt', name: 'Песня', duration: 1 }));
+assert.ok(sameSong({ id: 'ytA', kind: 'yt' }, { id: 'ytA', kind: 'yt' }));
+assert.ok(netOk({ kind: 'yt', vid: 'dQw4w9WgXcQ' }) && netOk({ kind: 'sc', url: 'https://soundcloud.com/a/b' }) && netOk({}));
+assert.ok(!netOk({ kind: 'yt', vid: 'x"><' }) && !netOk({ kind: 'sc', url: 'javascript:alert(1)' }) && !netOk({ kind: 'zz' }));
 // слова: точное совпадение, потом поиск с близкой длиной
 (async () => {
   const db = { get: { plainLyrics: 'p' }, search: [{ duration: 300, syncedLyrics: 'far' }, { duration: 182, syncedLyrics: 'near' }] };

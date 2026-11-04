@@ -285,6 +285,8 @@ input[type=range]:hover::-webkit-slider-thumb{transform:scale(1.25)}
 .seg button:hover{color:var(--fg)}
 .seg button.on{background:var(--a1);color:var(--on-a1)}
 #eqSeg{grid-template-columns:repeat(4,1fr)}
+.ovRow.libRow{justify-content:flex-start}
+#expSize{font-weight:600;color:var(--dim)}
 .thumbs{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:8px}
 .thumb{position:relative;aspect-ratio:16/10;border-radius:12px;background:center/cover rgb(var(--bg-rgb));overflow:hidden}
 .thumb button{position:absolute;top:4px;right:4px;width:24px;height:24px;border-radius:50%;background:rgba(0,0,0,.6);font-weight:800;opacity:0}
@@ -540,6 +542,11 @@ html.mobile button,html.mobile .song,html.mobile .pl{-webkit-tap-highlight-color
     <h4>Поиск</h4>
     <p class="small">Поиск песен прямо в Linea идёт через YouTube. Нужен твой бесплатный ключ YouTube Data API: он хранится только на этом устройстве.</p>
     <div class="ovRow"><input class="find" id="ytKey" spellcheck="false" placeholder="Ключ, начинается с AIza…" autocomplete="off"><button class="chipB" id="ytKeyChk">Проверить</button></div>
+    <h4>Перенос</h4>
+    <p class="small">Песни SoundCloud и YouTube, плейлисты, слова с правками и свои источники ленты — одним файлом .linea. Открой его в Linea на другом компьютере или телефоне: добавится то, чего там ещё нет.</p>
+    <label class="chk" id="expRow"><input type="checkbox" id="expFiles"><span></span>Вместе со своими файлами<b id="expSize"></b></label>
+    <div class="ovRow libRow"><button class="chipB" id="expBtn">Сохранить в файл</button><button class="chipB" id="impBtn">Открыть файл</button></div>
+    <input type="file" id="impFile" accept=".linea" hidden>
     <h4 class="pcOnly">Discord</h4>
     <p class="small pcOnly">Показывать в профиле Discord, что играет. Создай приложение на discord.com/developers и вставь его Application ID — Discord напишет «Слушает» и название приложения. Пусто — выключено.</p>
     <label class="field pcOnly">Application ID<input class="find" id="dcId" spellcheck="false" placeholder="Только цифры" autocomplete="off" inputmode="numeric"></label>

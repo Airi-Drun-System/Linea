@@ -311,7 +311,12 @@ async function addFiles(list) {
 $('file').addEventListener('change', (e) => { addFiles([...e.target.files]); e.target.value = ''; });
 for (const ev of ['dragenter', 'dragover']) addEventListener(ev, (e) => { if (!e.dataTransfer.types.includes('Files')) return; e.preventDefault(); $('drop').classList.add('over'); });
 for (const ev of ['dragleave', 'drop']) addEventListener(ev, (e) => { e.preventDefault(); $('drop').classList.remove('over'); });
-addEventListener('drop', (e) => e.dataTransfer.types.includes('Files') && addFiles([...(e.dataTransfer?.files || [])].filter((x) => /^audio\//.test(x.type) || /^video\//.test(x.type) || /\.(mp3|ogg|wav|flac|m4a|opus|aac|mp4|webm|mov|mkv)$/i.test(x.name))));
+addEventListener('drop', (e) => {
+  if (!e.dataTransfer.types.includes('Files')) return;
+  const fs = [...(e.dataTransfer?.files || [])], lib = fs.find((x) => /\.linea$/i.test(x.name));
+  if (lib) libImport(lib);
+  else addFiles(fs.filter((x) => /^audio\//.test(x.type) || /^video\//.test(x.type) || /\.(mp3|ogg|wav|flac|m4a|opus|aac|mp4|webm|mov|mkv)$/i.test(x.name)));
+});
 $('find').addEventListener('input', () => { query = $('find').value.trim().toLowerCase(); renderSongs(); });
 
 // ==================== песни по ссылке: SoundCloud, YouTube и прямые ссылки на файл ====================
@@ -789,6 +794,9 @@ function renderBgDlg() {
   $('ovMove').hidden = !settings.overlay;
   $('ovMove').textContent = ovMove ? 'Готово' : 'Подвинуть';
   document.querySelectorAll('.pcOnly').forEach((el) => { el.hidden = !window.lnApp || !!window.lnApp.mobile; });
+  const own = ownBytes();
+  $('expRow').hidden = !own;
+  $('expSize').textContent = own ? ` (${fmtBytes(own)}${own > 1e9 ? ' — файл выйдет большим' : ''})` : '';
   $('bgSong').textContent = cur && cur.bg ? 'Убрать картинку этой песни' : 'Своя картинка для этой песни';
   $('bgSong').disabled = !cur;
   const box = $('bgThumbs');
@@ -1918,6 +1926,93 @@ addEventListener('keydown', (e) => {
   e.preventDefault();
   if (!e.repeat || e.code === 'ArrowUp' || e.code === 'ArrowDown') act();
 });
+
+// ==================== перенос: библиотека одним файлом .linea ====================
+// первая строка — JSON с песнями, плейлистами и своими источниками ленты; дальше подряд сырые байты обложек, картинок
+// и (по галочке) своих файлов. Без base64 файл не раздувается, а при открытии режется на куски без копий в памяти
+const LIB_BLOBS = ['cover', 'bg', 'blob'];
+const ownBytes = () => songs.reduce((n, s) => n + (!s.kind && s.blob ? s.blob.size : 0), 0);
+const fmtBytes = (b) => (b >= 1e9 ? (b / 1e9).toFixed(1).replace('.', ',') + ' ГБ' : Math.max(1, Math.round(b / 1e6)) + ' МБ');
+function libExport(files) {
+  const parts = [], recs = [];
+  let at = 0;
+  for (const s of songs) {
+    const { img, imgUrl, imgPromise, bgUrl, vox, inst, wave, ...rec } = s;
+    for (const k of LIB_BLOBS) {
+      const b = rec[k];
+      if (!(b instanceof Blob)) continue;
+      if (!s.kind && !files) { delete rec[k]; continue; } // свои без файла: только слова и плейлисты — вдруг там тот же файл
+      parts.push(b); rec[k] = { at, n: b.size, type: b.type }; at += b.size;
+    }
+    recs.push(rec);
+  }
+  return new Blob([JSON.stringify({ linea: 1, songs: recs, playlists, feedOwn: settings.feedOwn }), '\n', ...parts]);
+}
+async function libSave() {
+  const name = `Linea-${new Date().toLocaleDateString('sv')}.linea`, blob = libExport($('expFiles').checked);
+  if (!window.lnApp || !window.lnApp.saveFile) { // ПК: обычное «Сохранить как»
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = name; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 600000);
+    return;
+  }
+  try {
+    if (await window.lnApp.saveFile(name, blob, (p) => showLoading('Сохраняю библиотеку', name, p))) toast('Библиотека сохранена');
+  } catch { toast('Не сохранилось'); } finally { $('loading').hidden = true; }
+}
+async function libImport(file) {
+  let head = null, base = 0;
+  try {
+    for (let n = 1 << 20; ; n *= 4) { // заголовок — до первого перевода строки (в JSON их нет)
+      const b = new Uint8Array(await file.slice(0, n).arrayBuffer()), i = b.indexOf(10);
+      if (i < 0 && n < file.size) continue;
+      head = JSON.parse(new TextDecoder().decode(i < 0 ? b : b.subarray(0, i)));
+      base = i + 1;
+      break;
+    }
+  } catch { head = null; }
+  if (!head || head.linea !== 1 || !Array.isArray(head.songs)) { toast('Это не файл Linea'); return; }
+  const ids = new Map(); // id в файле → id здесь
+  let added = 0, lyr = 0, skip = 0;
+  try {
+    for (const [k, r] of head.songs.entries()) {
+      if (!r || typeof r.id !== 'string' || typeof r.name !== 'string' || !netOk(r)) continue;
+      if (!Array.isArray(r.lyrics)) delete r.lyrics;
+      if (typeof r.plain !== 'string') delete r.plain;
+      showLoading('Переношу библиотеку', r.name, k / head.songs.length);
+      const have = songs.find((s) => sameSong(s, r));
+      if (have) {
+        ids.set(r.id, have.id);
+        if (!lyricsOf(have) && !have.plain && (lyricsOf(r) || r.plain)) { for (const f of ['lyrics', 'plain', 'lyrOff', 'lyrAuto']) have[f] = r[f]; saveSong(have); lyr++; }
+        continue;
+      }
+      for (const f of LIB_BLOBS) {
+        const d = r[f];
+        if (d && d.n >= 0 && d.at >= 0) r[f] = file.slice(base + d.at, base + d.at + d.n, String(d.type || '')); else delete r[f];
+      }
+      if (!r.kind && !r.blob) { skip++; continue; } // свой без файла: играть нечему
+      r.added = Number(r.added) || Date.now();
+      if (!(await DB.put(r))) { toast('Не сохранилось в базу'); break; }
+      songs.push(r); ids.set(r.id, r.id); added++;
+    }
+  } finally { $('loading').hidden = true; }
+  for (const p of Array.isArray(head.playlists) ? head.playlists : []) {
+    if (!p || !Array.isArray(p.ids)) continue;
+    const list = p.ids.map((i) => ids.get(i)).filter(Boolean), mine = playlists.find((x) => x.id === p.id || x.name === p.name);
+    if (mine) { for (const i of list) if (!mine.ids.includes(i)) mine.ids.push(i); } else if (list.length) playlists.push({ id: String(p.id), name: String(p.name || 'Плейлист').slice(0, 60), ids: [...new Set(list)] });
+  }
+  for (const o of Array.isArray(head.feedOwn) ? head.feedOwn : []) {
+    if (o && /^https:\/\//.test(o.url) && !settings.feedOwn.some((x) => x.url === o.url)) settings.feedOwn.push({ id: String(o.id), name: String(o.name || '').slice(0, 30), url: o.url });
+  }
+  songs.sort((a, b) => b.added - a.added);
+  savePls(); saveSettings(); renderPls(); renderSongs(); renderFeedSrc(); renderBgDlg();
+  const said = [added && `Добавлено: ${plural(added)}`, lyr && `Слова дописаны: ${lyr}`, skip && `Свои без файла пропущены: ${skip}`].filter(Boolean);
+  toast(!said.length ? 'Всё это здесь уже есть' : added || lyr ? said.join('. ') : said[0] + '. Сохрани с галочкой «Вместе со своими файлами»');
+}
+$('expBtn').addEventListener('click', libSave);
+$('impBtn').addEventListener('click', () => $('impFile').click());
+$('impFile').addEventListener('change', (e) => { if (e.target.files[0]) libImport(e.target.files[0]); e.target.value = ''; });
+if (window.lnApp && window.lnApp.mobile) $('impFile').removeAttribute('accept'); // Android не знает тип .linea и не показал бы файл
 
 // ==================== старт ====================
 (async () => {
