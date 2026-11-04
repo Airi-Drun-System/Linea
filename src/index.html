@@ -58,13 +58,19 @@ kbd{font:700 12px var(--ui);background:var(--glass-2);border:1px solid var(--lin
 /* затемнение: на ударах баса чуть расступается — фон «дышит» */
 .backdrop .shade{position:absolute;inset:0;opacity:calc(1 - var(--kick) * var(--bg-react,.45));background:radial-gradient(120% 90% at 30% 40%,transparent 0,rgba(9,9,13,.5) 58%,rgba(9,9,13,.9) 100%),rgba(9,9,13,var(--bg-dim,.25))}
 
-.app{position:fixed;inset:0;display:grid;grid-template-columns:300px minmax(0,1fr);gap:18px;padding:18px;animation:fade .5s var(--ease) both}
+.app{position:fixed;inset:0;display:flex;flex-direction:column;padding:16px 24px 24px;animation:fade .5s var(--ease) both}
 .glass{background:var(--glass);border:1px solid var(--line);backdrop-filter:blur(24px) saturate(1.3);border-radius:22px}
 .pill{padding:9px 16px;border-radius:99px;background:var(--glass);border:1px solid var(--line);font-weight:700;font-size:14px;backdrop-filter:blur(16px)}
 .pill:hover{background:var(--glass-2)}
 
 /* ---------- библиотека ---------- */
-.side{display:flex;flex-direction:column;gap:10px;min-height:0;padding:14px}
+.side{position:fixed;z-index:6;left:0;top:0;bottom:0;width:340px;max-width:calc(100vw - 48px);display:flex;flex-direction:column;gap:10px;padding:18px 16px;background:#111114;transform:translateX(-102%);transition:transform .32s cubic-bezier(.23,1,.32,1)}
+body.lib .side{transform:none;box-shadow:24px 0 60px rgba(0,0,0,.45)}
+.scrim{position:fixed;inset:0;z-index:5;background:rgba(0,0,0,.4);opacity:0;pointer-events:none;transition:opacity .25s}
+body.lib .scrim{opacity:1;pointer-events:auto}
+.sideTop{display:flex;align-items:center;justify-content:space-between;font:20px var(--display);padding:0 4px 4px}
+.x{width:36px;height:36px;border-radius:50%;font-size:22px;color:var(--dim)}
+.x:hover{background:var(--glass-2);color:var(--fg)}
 .brand{display:flex;align-items:center;gap:10px;font:22px var(--display);letter-spacing:-.01em;padding:2px 4px 6px}
 .brand img{width:34px;height:34px;object-fit:contain}
 .add{position:relative;display:flex;gap:12px;align-items:center;padding:10px;border-radius:16px;border:1.5px dashed rgba(255,255,255,.22);cursor:pointer;transition:border-color .2s,background .2s}
@@ -89,13 +95,26 @@ kbd{font:700 12px var(--ui);background:var(--glass-2);border:1px solid var(--lin
 .song .del.sure{opacity:1;width:auto;padding:0 10px;font-size:12px;font-weight:800;background:rgba(255,84,104,.2);color:var(--bad)}
 .side .none{color:var(--dim);font-size:13px;padding:8px 4px}
 
-/* ---------- сейчас играет ---------- */
-.now{display:flex;flex-direction:column;gap:14px;min-width:0;min-height:0}
-.top{display:flex;gap:8px;align-items:center}
-.grow{flex:1}
-.stage{flex:1;min-height:0;display:grid;grid-template-columns:minmax(240px,400px) minmax(0,1fr);gap:clamp(24px,4.5vw,64px);align-items:center;padding:0 clamp(0px,1.5vw,24px)}
-.left{display:flex;flex-direction:column;gap:16px;min-width:0}
-.cover{position:relative;width:100%;max-width:min(400px,46vh);aspect-ratio:1;border-radius:28px;overflow:hidden;background:#15151c;transform:scale(calc(1 + var(--kick)*.045));transition:transform .08s linear,box-shadow .6s;box-shadow:0 30px 90px calc(-10px + var(--kick)*30px) color-mix(in srgb,var(--a1) calc(38% + var(--kick)*40%),transparent),0 0 0 1px rgba(255,255,255,.08)}
+/* ---------- сейчас играет: всё по центру ---------- */
+.topbar{display:flex;align-items:center;justify-content:space-between;flex:none}
+.brandBtn{display:flex;align-items:center;gap:10px;padding:6px 14px 6px 6px;border-radius:99px;font:20px var(--display);letter-spacing:-.01em}
+.brandBtn img{width:36px;height:36px;object-fit:contain}
+.brandBtn small{font:600 14px var(--ui);color:var(--dim);margin-left:4px}
+.brandBtn:hover{background:var(--glass)}
+.brandBtn:hover small{color:var(--fg)}
+.iconBtn{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;color:var(--dim)}
+.iconBtn svg{width:24px;height:24px;fill:currentColor}
+.iconBtn:hover{background:var(--glass);color:var(--fg)}
+.center{flex:1;min-height:0;display:flex;flex-direction:column;align-items:center;gap:14px;width:min(860px,100%);margin:0 auto}
+.stage{flex:1;min-height:0;width:100%;position:relative;display:grid;place-items:center}
+.stage .cover{height:min(100%,420px);width:auto;max-width:100%;transition:opacity .35s,transform .08s linear}
+.stage .lyr{position:absolute;inset:0;opacity:0;pointer-events:none;transition:opacity .35s}
+.stage.lyrOn .cover{opacity:0;pointer-events:none}
+.stage.lyrOn .lyr{opacity:1;pointer-events:auto}
+.meta{text-align:center;max-width:100%}
+.meta h1,.meta p{text-align:center}
+.seek{width:min(640px,100%)}
+.cover{position:relative;aspect-ratio:1;border-radius:24px;overflow:hidden;background:#17171b;transform:scale(calc(1 + var(--kick)*.035));box-shadow:0 24px 70px rgba(0,0,0,.45)}
 .cover img{width:100%;height:100%;object-fit:cover;display:block}
 .cover img[src="cube.png"]{object-fit:contain;padding:18%;box-sizing:border-box}
 .meta.swap>*{animation:rise .6s var(--ease) both}
@@ -111,7 +130,7 @@ input[type=range]:hover::-webkit-slider-thumb{transform:scale(1.25)}
 .btns svg{width:26px;height:26px;fill:currentColor}
 .step{width:54px;height:54px;background:var(--glass-2);border:1px solid var(--line)}
 .step:hover{background:rgba(255,255,255,.17)}
-#play{width:74px;height:74px;background:var(--a1);color:var(--on-a1);box-shadow:0 14px 40px -6px color-mix(in srgb,var(--a1) 70%,transparent);transition:transform .25s var(--spring),background .6s,box-shadow .6s}
+#play{width:74px;height:74px;background:var(--a1);color:var(--on-a1);transition:transform .25s var(--spring),background .6s,box-shadow .6s}
 #play svg{width:32px;height:32px}
 #play:hover{transform:scale(1.06)}
 .vol{flex:1;display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px;align-items:center;max-width:170px;color:var(--dim);margin:0 6px}
@@ -121,15 +140,12 @@ input[type=range]:hover::-webkit-slider-thumb{transform:scale(1.25)}
 
 /* ---------- слова: караоке ---------- */
 .lyr{position:relative;height:100%;min-height:0;overflow:hidden;-webkit-mask-image:linear-gradient(transparent,#000 22%,#000 70%,transparent);mask-image:linear-gradient(transparent,#000 22%,#000 70%,transparent)}
-.lines{position:absolute;left:0;right:0;top:40%;display:flex;flex-direction:column;gap:clamp(10px,1.6vh,20px);transition:transform .7s var(--ease)}
-.ln{font:800 clamp(22px,2.7vw,42px)/1.18 var(--ui);letter-spacing:-.015em;color:rgba(246,245,250,.28);text-wrap:balance;cursor:pointer;transform-origin:left center;transition:color .4s,filter .5s,transform .6s var(--ease);filter:blur(1.5px)}
+.lines{position:absolute;left:0;right:0;top:44%;display:flex;flex-direction:column;gap:clamp(10px,1.6vh,20px);transition:transform .7s var(--ease)}
+.ln{font:800 clamp(22px,2.7vw,42px)/1.18 var(--ui);letter-spacing:-.015em;color:rgba(246,245,250,.28);text-wrap:balance;cursor:pointer;transform-origin:center;text-align:center;transition:color .4s,filter .5s,transform .6s var(--ease);filter:blur(1.5px)}
 .ln:hover{color:rgba(246,245,250,.55);filter:none}
 .ln.past{color:rgba(246,245,250,.4)}
 .ln.on{filter:none;transform:scale(1.04);color:transparent;background:linear-gradient(90deg,#fff calc(var(--p,0)*100%),rgba(255,255,255,.42) calc(var(--p,0)*100% + 8%));-webkit-background-clip:text;background-clip:text}
 .ln.gap{font-size:clamp(18px,2vw,28px);letter-spacing:.3em}
-.empty{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;gap:14px;max-width:480px;animation:rise .6s var(--ease) both}
-.empty h2{font:clamp(26px,2.6vw,38px)/1.1 var(--display);letter-spacing:-.01em}
-.empty p{color:var(--dim)}
 .acts{display:flex;gap:8px;flex-wrap:wrap}
 .acts button{padding:12px 20px;border-radius:99px;font-weight:800;background:var(--glass-2);border:1px solid var(--line)}
 .acts button:hover{background:rgba(255,255,255,.17)}
@@ -141,7 +157,6 @@ input[type=range]:hover::-webkit-slider-thumb{transform:scale(1.25)}
 .syncBar{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
 .syncBar button{padding:10px 16px;border-radius:99px;font-weight:800;background:var(--glass-2);border:1px solid var(--line)}
 .syncBar .main{background:var(--a1);color:var(--on-a1);padding:14px 26px;font-size:16px}
-.foot{display:flex;flex-wrap:wrap;gap:6px 16px;color:var(--dim);font-size:13px}
 
 /* слова по словам: спетые загораются по одному */
 .ln.on.wl{color:rgba(255,255,255,.42);background:none;-webkit-background-clip:border-box;background-clip:border-box}
@@ -181,7 +196,7 @@ input[type=range]:hover::-webkit-slider-thumb{transform:scale(1.25)}
 .card>.find{padding:12px 14px}
 
 /* плейлисты */
-.plHead{display:flex;align-items:center;justify-content:space-between;padding:4px 4px 0;color:var(--dim);font-size:12px;letter-spacing:.08em;text-transform:uppercase}
+.plHead{display:flex;align-items:center;justify-content:space-between;padding:6px 4px 0;color:var(--dim);font-size:14px}
 .plHead b{font-weight:800}
 .mini{width:28px;height:28px;border-radius:50%;background:var(--glass-2);font:800 17px var(--ui);color:var(--fg)}
 .mini:hover{background:var(--a1);color:var(--on-a1)}
@@ -243,7 +258,9 @@ body.liquid .card.lg{background:rgba(20,20,28,.42)}
 body.liquid .menu.lg{background:rgba(20,20,28,.5)}
 body.liquid .over{backdrop-filter:blur(6px);background:rgba(6,6,9,.35)}
 
-.card h4{margin:6px 0 -4px;font:800 12px var(--ui);letter-spacing:.08em;text-transform:uppercase;color:var(--dim)}
+.card h4{margin:8px 0 -4px;font:18px var(--display);color:var(--fg)}
+.keys{font-size:13px}
+.offs{display:inline-flex}
 .ovRow{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .mode.kar{padding:0 12px}
 
@@ -257,76 +274,54 @@ body.liquid .over{backdrop-filter:blur(6px);background:rgba(6,6,9,.35)}
 .bar i{display:block;height:100%;width:0;border-radius:99px;background:var(--a1);transition:width .2s}
 .toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);padding:10px 18px;border-radius:99px;background:rgba(22,22,30,.92);border:1px solid var(--line);font-weight:700;z-index:6;animation:pop .35s var(--spring) both}
 
-/* узкое окно: библиотека выезжает по кнопке */
-#libBtn{display:none}
-@media (max-width:1100px){
-  .app{grid-template-columns:minmax(0,1fr)}
-  .side{position:fixed;z-index:4;left:18px;top:18px;bottom:18px;width:300px;background:rgba(18,18,26,.94);transform:translateX(calc(-100% - 30px));transition:transform .45s var(--ease)}
-  body.lib .side{transform:none}
-  #libBtn{display:block}
-}
-@media (max-height:680px){.cover{max-width:36vh}.left{gap:10px}#play{width:60px;height:60px}.step{width:46px;height:46px}.foot{display:none}}
+@media (max-height:700px){.center{gap:10px}#play{width:60px;height:60px}.step{width:46px;height:46px}.meta h1{font-size:24px}}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 </head>
 <body>
 <div class="backdrop" id="backdrop" aria-hidden="true"><div class="grad"></div><div class="img" id="bgA"></div><div class="img" id="bgB"></div><div class="shade"></div></div>
 
-<div class="app">
-  <aside class="side glass" aria-label="Мои песни">
-    <div class="brand"><img src="logo.png" alt="">Linea</div>
-    <label class="add" id="drop">
+<aside class="side" id="side" aria-label="Мои песни">
+  <div class="sideTop"><b>Мои песни</b><button class="x" id="libClose" aria-label="Закрыть">×</button></div>
+  <label class="add" id="drop">
       <input type="file" id="file" accept="audio/*,.mp3,.ogg,.wav,.flac,.m4a" multiple>
       <span class="plus">+</span>
       <span><b>Добавить песни</b><small>mp3, flac, wav: перетащи или нажми</small></span>
     </label>
-    <div class="plHead"><b>Плейлисты</b><button class="mini" id="plNew" title="Новый плейлист" aria-label="Новый плейлист">+</button></div>
-    <div class="pls" id="pls"></div>
-    <input class="find" id="find" placeholder="Поиск по песням" spellcheck="false" aria-label="Поиск по песням">
-    <div class="songs" id="songs"></div>
-  </aside>
+  <div class="plHead"><b>Плейлисты</b><button class="mini" id="plNew" title="Новый плейлист" aria-label="Новый плейлист">+</button></div>
+  <div class="pls" id="pls"></div>
+  <input class="find" id="find" placeholder="Поиск по песням" spellcheck="false" aria-label="Поиск по песням">
+  <div class="songs" id="songs"></div>
+</aside>
+<div class="scrim" id="scrim"></div>
 
-  <main class="now">
-    <header class="top">
-      <button class="pill" id="libBtn">Песни</button>
-      <span class="grow"></span>
-      <button class="pill" id="bgBtn">Настройки</button>
-      <button class="pill ai" id="aiBtn">Распознать слова</button>
-      <span class="offs" id="offs" hidden title="Если слова спешат или опаздывают"><button id="offM" aria-label="Слова раньше">−</button><b id="offV">0.0 с</b><button id="offP" aria-label="Слова позже">+</button></span>
-      <button class="pill" id="findLrc">Найти слова</button>
-      <button class="pill" id="editLrc">Разметить слова</button>
-      <button class="pill" id="fileLrc">Файл .lrc</button>
-    </header>
-    <section class="stage">
-      <section class="left">
-        <div class="cover"><img id="coverImg" alt=""></div>
-        <div class="meta" id="meta"><h1 id="title">Linea</h1><p id="artist">Добавь песни слева</p></div>
-        <div class="seek"><span id="cur">0:00</span><div class="wave"><canvas id="waveCv"></canvas><input type="range" id="seek" min="0" max="1000" value="0" aria-label="Перемотка"></div><span id="dur">0:00</span></div>
-        <div class="btns">
+<div class="app">
+  <header class="topbar">
+    <button class="brandBtn" id="libBtn" title="Мои песни"><img src="logo.png" alt=""><span>Linea</span><small>Песни</small></button>
+    <button class="iconBtn" id="bgBtn" aria-label="Настройки" title="Настройки"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.4 13a7.6 7.6 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7.4 7.4 0 0 0-1.7-1L15 3h-4l-.4 2.7a7.4 7.4 0 0 0-1.7 1l-2.5-1-2 3.5L6.6 11a7.6 7.6 0 0 0 0 2l-2.2 1.6 2 3.5 2.5-1a7.4 7.4 0 0 0 1.7 1L11 21h4l.4-2.7a7.4 7.4 0 0 0 1.7-1l2.5 1 2-3.5zM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z" transform="translate(-1 0)"/></svg></button>
+  </header>
+  <main class="center">
+    <section class="stage" id="stage">
+      <div class="cover"><img id="coverImg" alt=""></div>
+      <section class="lyr" id="lyr"><div class="lines" id="lines"></div></section>
+    </section>
+    <div class="meta" id="meta"><h1 id="title">Linea</h1><p id="artist">Добавь песни слева</p></div>
+    <div class="seek"><span id="cur">0:00</span><div class="wave"><canvas id="waveCv"></canvas><input type="range" id="seek" min="0" max="1000" value="0" aria-label="Перемотка"></div><span id="dur">0:00</span></div>
+    <div class="btns">
           <button class="step" id="prev" aria-label="Предыдущая"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5h2v14H6zM20 5v14L9 12z"/></svg></button>
           <button id="play" aria-label="Играть"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg></button>
           <button class="step" id="next" aria-label="Следующая"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 5h2v14h-2zM4 5v14l11-7z"/></svg></button>
         </div>
-        
-        <div class="modes">
+    <div class="modes">
           <button class="mode" id="shuf" aria-pressed="false" title="Перемешать"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 3h5v5l-1.8-1.8-4.3 4.3-1.4-1.4 4.3-4.3zM4 5.4 5.4 4 20 18.6 18.6 20zM14.3 15.7l1.4-1.4 3.5 3.5L21 16v5h-5l1.8-1.8z"/></svg></button>
           <button class="mode" id="rep" aria-pressed="false" title="Повторять песню"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h10v3l4-4-4-4v3H5v6h2zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2z"/></svg><i>1</i></button>
           <label class="vol"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9zm12.5 3a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4z"/></svg><input type="range" id="vol" min="0" max="1" step="0.05" aria-label="Громкость"></label>
           <button class="mode spd" id="spd" title="Скорость">Обычная</button>
+          <button class="mode lyrB" id="lyrBtn" aria-pressed="true" title="Слова или обложка" hidden>Слова</button>
           <button class="mode kar pcOnly" id="kar" aria-pressed="false" title="Убрать голос из песни (нейросеть)">Минус</button>
         </div>
-        <p class="up" id="up"></p>
-        <div class="syncBar" id="syncBar" hidden><button class="main" id="syncTap">Строка!</button><button id="syncUndo">Назад</button><button id="syncStop">Отмена</button></div>
-      </section>
-      <section class="lyr" id="lyr"><div class="lines" id="lines"></div>
-        <div class="empty" id="empty" hidden>
-          <h2 id="emptyTitle">Песен пока нет</h2>
-          <p id="emptyText"></p>
-          <div class="acts" id="emptyActs"><button class="main" id="emptyAi">Распознать нейросетью</button><button id="emptySync">Вставить текст и разметить</button><button id="emptyFind">Найти в интернете</button></div>
-        </div>
-      </section>
-    </section>
-    <footer class="foot"><span><kbd>←</kbd> <kbd>→</kbd> песни</span><span><kbd>Пробел</kbd> пауза</span><span><kbd>↑</kbd> <kbd>↓</kbd> громкость</span><span>Медиа-клавиши работают, даже когда окно свёрнуто</span></footer>
+    <p class="up" id="up"></p>
+    <div class="syncBar" id="syncBar" hidden><button class="main" id="syncTap">Строка!</button><button id="syncUndo">Назад</button><button id="syncStop">Отмена</button></div>
   </main>
 </div>
 
@@ -338,19 +333,6 @@ body.liquid .over{backdrop-filter:blur(6px);background:rgba(6,6,9,.35)}
     <p>Каждая строка песни — с новой строки. Потом песня начнётся сначала, а ты жми <kbd>Пробел</kbd> (или кнопку «Строка!»), когда начинают петь очередную строку. Ошибся — <kbd>Backspace</kbd>.</p>
     <textarea id="syncText" spellcheck="false" placeholder="Вставь сюда текст песни"></textarea>
     <div class="acts"><button class="main" id="syncGo">Разметить</button><button id="syncClear" hidden>Убрать слова</button><button id="syncCancel">Отмена</button></div>
-  </div>
-</div>
-
-<div class="over" id="aiDlg" hidden>
-  <div class="card">
-    <h3>Распознать слова</h3>
-    <p>Нейросеть Whisper послушает песню и запишет слова с временем каждого слова. Всё считается на твоём компьютере, без интернета.</p>
-    <p id="aiFirst">В первый раз скачается около 1 ГБ: программа распознавания и сама нейросеть. Дальше — сразу.</p>
-    <p id="aiReplace" hidden>Слова, которые сейчас у песни, заменятся.</p>
-    <label class="field">Язык песни
-      <select id="aiLang"><option value="auto">Определить самому</option><option value="ru">Русский</option><option value="en">Английский</option><option value="uk">Украинский</option></select>
-    </label>
-    <div class="acts"><button class="main" id="aiGo">Распознать</button><button id="aiCancel">Отмена</button></div>
   </div>
 </div>
 
@@ -368,7 +350,7 @@ body.liquid .over{backdrop-filter:blur(6px);background:rgba(6,6,9,.35)}
 <div class="over" id="sepDlg" hidden>
   <div class="card">
     <h3>Убрать голос</h3>
-    <p>Нейросеть разберёт песню на голос и музыку. Получится минус — можно петь самому под слова. А распознавание слов потом пойдёт по чистому голосу и будет точнее.</p>
+    <p>Нейросеть разберёт песню на голос и музыку. Получится минус — можно петь самому под слова.</p>
     <p id="sepFirst">В первый раз скачается нейросеть, около 170 МБ.</p>
     <p>Считает видеокарта, на песню обычно уходит около минуты.</p>
     <div class="acts"><button class="main" id="sepGo">Убрать голос</button><button id="sepCancel">Отмена</button></div>
@@ -378,6 +360,9 @@ body.liquid .over{backdrop-filter:blur(6px);background:rgba(6,6,9,.35)}
 <div class="over" id="bgDlg" hidden>
   <div class="card bgCard">
     <h3>Настройки</h3>
+    <h4>Слова</h4>
+    <div class="acts"><button id="findLrc">Найти слова</button><button id="editLrc">Разметить вручную</button><button id="fileLrc">Файл .lrc</button></div>
+    <div class="ovRow" id="offs" hidden><span>Слова спешат или опаздывают</span><span class="offs"><button id="offM" aria-label="Слова раньше">−</button><b id="offV">0.0 с</b><button id="offP" aria-label="Слова позже">+</button></span></div>
     <h4>Фон</h4>
     <div class="seg" id="bgMode"><button data-m="cover">Обложка песни</button><button data-m="images">Свои картинки</button><button data-m="gradient">Градиент</button></div>
     <div id="bgImagesBox">
@@ -398,6 +383,7 @@ body.liquid .over{backdrop-filter:blur(6px);background:rgba(6,6,9,.35)}
     <label class="chk pcOnly"><input type="checkbox" id="keysG"><span></span>Стрелки ← → переключают песни везде, даже в других программах и играх</label>
     <div class="ovRow pcOnly"><label class="chk"><input type="checkbox" id="ovOn"><span></span>Слова поверх игр</label><button class="chipB" id="ovMove" hidden>Подвинуть</button></div>
     <label class="field">Стекло<select id="glassSel"><option value="liquid">Жидкое: преломляет фон, как линза</option><option value="plain">Обычное: размытое, легче для слабых компьютеров</option></select></label>
+    <p class="keys"><kbd>←</kbd> <kbd>→</kbd> песни · <kbd>Пробел</kbd> пауза · <kbd>↑</kbd> <kbd>↓</kbd> громкость · <kbd>Esc</kbd> закрыть</p>
     <div class="acts"><button class="main" id="bgClose">Готово</button></div>
   </div>
 </div>

@@ -31,38 +31,6 @@ function lineAt(lines, t) {
   while (i + 1 < lines.length && lines[i + 1].t <= t) i++;
   return i;
 }
-// ответ whisper-cli (-ojf) -> строки караоке с таймингом каждого слова
-const NOISE = /^[\s\-–—.,!?…'"«»()[\]*♪♫🎵]*$/u;
-function whisperToLines(jsonText) {
-  const data = JSON.parse(jsonText.replace(/[\u0000-\u001f]/g, ' '));
-  const words = [];
-  for (const seg of data.transcription || []) {
-    let w = null, first = true;
-    for (const tok of seg.tokens || []) {
-      const text = tok.text || '';
-      if (/^\[_|^<\|/.test(text)) continue; // служебные токены модели
-      const t = tok.t_dtw > 0 ? tok.t_dtw * 10 : tok.offsets ? tok.offsets.from : seg.offsets.from;
-      if (!w || /^\s/.test(text)) {
-        if (w) words.push(w);
-        w = { t, text: text.trim(), seg: first };
-        first = false;
-      } else w.text += text;
-    }
-    if (w) words.push(w);
-  }
-  // шум вместо слов: «[музыка]», «♪», одиночная пунктуация
-  const clean = words.filter((w) => w.text && !NOISE.test(w.text) && !/^[[(].*[\])]$/.test(w.text));
-  const lines = [];
-  let line = null;
-  clean.forEach((w, i) => {
-    const prev = clean[i - 1];
-    const brk = !line || w.seg || w.t - prev.t > 1200 || /[.!?…]$/.test(prev.text) || line.text.length + w.text.length > 42;
-    if (brk) { line = { t: w.t, text: w.text, words: [{ t: w.t, text: w.text }] }; lines.push(line); }
-    else { line.text += ' ' + w.text; line.words.push({ t: w.t, text: w.text }); }
-  });
-  // модель иногда зацикливается и повторяет одну строку: больше трёх подряд не берём
-  return lines.filter((l, i) => !(i >= 3 && l.text === lines[i - 1].text && l.text === lines[i - 2].text && l.text === lines[i - 3].text));
-}
 // правка текста строки: новые слова раскладываются по времени старых, между ними — плавно
 function retextLine(line, text, endT) {
   const parts = text.trim().split(/\s+/).filter(Boolean);
@@ -85,4 +53,4 @@ function peaks(data, n) {
   const max = Math.max(...out) || 1;
   return out.map((v) => Math.round((v / max) * 100) / 100);
 }
-if (typeof module !== 'undefined') module.exports = { hashStr, rng, fmtDur, cleanName, parseLRC, lineAt, whisperToLines, retextLine, peaks };
+if (typeof module !== 'undefined') module.exports = { hashStr, rng, fmtDur, cleanName, parseLRC, lineAt, retextLine, peaks };

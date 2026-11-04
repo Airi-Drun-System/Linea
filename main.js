@@ -3,7 +3,6 @@ const { app, BrowserWindow, ipcMain, net, globalShortcut, screen } = require('el
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
-const { spawn } = require('child_process');
 
 // музыка играет и в свёрнутом окне без задержек
 app.commandLine.appendSwitch('disable-renderer-backgrounding');
@@ -72,38 +71,7 @@ ipcMain.handle('lyrics:find', async (_e, q) => {
 });
 
 
-// ==================== распознавание слов: whisper.cpp прямо на компьютере ====================
-// программа ставится с GitHub whisper.cpp, модель — с Hugging Face; оба качаются один раз
-const W_DIR = () => path.join(app.getPath('userData'), 'whisper');
-const MODEL = 'ggml-large-v3-turbo-q5_0.bin';
-const MODEL_URL = `https://huggingface.co/ggerganov/whisper.cpp/resolve/main/${MODEL}`;
-const REL_API = 'https://api.github.com/repos/ggml-org/whisper.cpp/releases/latest';
-const REL_PREFIX = 'https://github.com/ggml-org/whisper.cpp/releases/download/';
-let job = null; // { ctrl, proc }
-
-function findFile(dir, name) {
-  if (!fs.existsSync(dir)) return null;
-  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
-    const p = path.join(dir, e.name);
-    if (e.isFile() && e.name.toLowerCase() === name) return p;
-    if (e.isDirectory()) { const f = findFile(p, name); if (f) return f; }
-  }
-  return null;
-}
-// whisper.cpp и tar читают пути в кодировке Windows и ломаются на русских буквах (папка пользователя «ЧЕЛ»),
-// поэтому запускаем их из рабочей папки и даём только короткие латинские пути
-function run(cmd, args, onErr, cwd) {
-  return new Promise((resolve) => {
-    let p;
-    try { p = spawn(cmd, args, { windowsHide: true, cwd }); } catch { resolve(-1); return; }
-    if (job) job.proc = p;
-    let buf = '';
-    p.stderr.on('data', (d) => { if (!onErr) return; buf += d; const ls = buf.split(/\r?\n/); buf = ls.pop(); ls.forEach(onErr); });
-    p.stdout.on('data', () => {});
-    p.on('error', () => resolve(-1));
-    p.on('close', (code) => resolve(code));
-  });
-}
+// ==================== скачивание больших файлов (модель для минуса) ====================
 async function download(url, dest, onProgress, signal) {
   const r = await net.fetch(url, { headers: UA, signal });
   if (!r.ok) throw new Error(`Сервер ответил ${r.status}. Проверь интернет или включи VPN.`);
@@ -122,86 +90,7 @@ async function download(url, dest, onProgress, signal) {
   if (total && got !== total) { fs.rmSync(part, { force: true }); throw new Error('Файл скачался не целиком, попробуй ещё раз.'); }
   fs.renameSync(part, dest);
 }
-async function ensureWhisper(send, signal) {
-  const dir = W_DIR(), binDir = path.join(dir, 'bin'), model = path.join(dir, MODEL);
-  fs.mkdirSync(dir, { recursive: true });
-  let exe = findFile(binDir, 'whisper-cli.exe');
-  if (!exe || (await run(exe, ['-h'])) !== 0) {
-    exe = null;
-    logLine('whisper: ставлю, exe был', exe);
-    const rel = await (await net.fetch(REL_API, { headers: UA, signal })).json();
-    const assets = (rel && rel.assets) || [];
-    const pick = (re) => assets.find((a) => re.test(a.name));
-    const gpu = await app.getGPUInfo('basic').catch(() => ({}));
-    const nvidia = ((gpu && gpu.gpuDevice) || []).some((d) => d.vendorId === 0x10de);
-    // видеокарта NVIDIA: сборка с CUDA (в разы быстрее); иначе — обычная для процессора
-    logLine('whisper: релиз', rel && rel.tag_name, 'файлы', assets.map((a) => a.name), 'nvidia', nvidia);
-    const tries = [nvidia && (pick(/^whisper-bin-win-cuda-12[\d.]*-x64\.zip$/) || pick(/^whisper-cublas-12[\d.]*-bin-x64\.zip$/)), pick(/^whisper-bin-x64\.zip$/)].filter(Boolean);
-    for (const a of tries) {
-      if (!a.browser_download_url.startsWith(REL_PREFIX)) continue;
-      const zip = path.join(dir, a.name);
-      await download(a.browser_download_url, zip, (p) => send('bin', p), signal);
-      fs.rmSync(binDir, { recursive: true, force: true });
-      fs.mkdirSync(binDir, { recursive: true });
-      send('unzip', 0);
-      const tar = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe');
-      const tc = await run(tar, ['-xf', a.name, '-C', 'bin'], null, dir);
-      fs.rmSync(zip, { force: true });
-      exe = findFile(binDir, 'whisper-cli.exe');
-      const hc = exe ? await run(exe, ['-h']) : null;
-      logLine('whisper: скачал', a.name, 'tar', tc, 'exe', exe, '-h', hc);
-      if (hc === 0) break;
-      exe = null;
-    }
-    if (!exe) throw new Error('Не получилось поставить распознавание.');
-  }
-  if (!fs.existsSync(model)) { logLine('whisper: качаю модель'); await download(MODEL_URL, model, (p) => send('model', p), signal); logLine('whisper: модель скачана', fs.statSync(model).size); }
-  return { exe, model };
-}
-ipcMain.handle('whisper:run', async (e, q) => {
-  if (job) throw new Error('Уже распознаю другую песню.');
-  const wav = q && q.wav;
-  if (!(wav instanceof ArrayBuffer) || wav.byteLength < 44 || wav.byteLength > 300e6) throw new Error('Не тот звук.');
-  const lang = /^(auto|[a-z]{2})$/.test(q.lang) ? q.lang : 'auto';
-  const ctrl = new AbortController();
-  job = { ctrl, proc: null };
-  const send = (stage, p) => { if (!e.sender.isDestroyed()) e.sender.send('whisper:progress', { stage, p }); };
-  const tmp = path.join(W_DIR(), 'job');
-  fs.rmSync(tmp, { recursive: true, force: true });
-  fs.mkdirSync(tmp, { recursive: true });
-  try {
-    const { exe } = await ensureWhisper(send, ctrl.signal);
-    const base = path.join(tmp, 'out');
-    fs.writeFileSync(path.join(tmp, 'in.wav'), Buffer.from(wav));
-    const threads = String(Math.max(2, Math.min(8, os.cpus().length - 1)));
-    // -dtw даёт точное время каждого слова; -mc 0 не даёт модели зацикливаться на припевах
-    const args = ['-m', MODEL, '-f', 'job/in.wav', '-l', lang, '-ojf', '-of', 'job/out', '-dtw', 'large.v3.turbo', '-nfa', '-sns', '-mc', '0', '-pp', '-t', threads];
-    const tail = []; // последние строки whisper — показать, если он упадёт
-    const progress = (line) => { const m = line.match(/progress\s*=\s*(\d+)%/); if (m) send('run', Number(m[1]) / 100); else if (line.trim()) { tail.push(line.trim()); if (tail.length > 4) tail.shift(); } };
-    send('run', 0);
-    let code = await run(exe, args, progress, W_DIR());
-    logLine('whisper: код', code, tail);
-    if (code !== 0 && !ctrl.signal.aborted) { send('cpu', 0); code = await run(exe, [...args, '-ng'], progress, W_DIR()); } // видеокарта не завелась — считаем на процессоре
-    if (ctrl.signal.aborted) return null;
-    logLine('whisper: итог', code, fs.existsSync(base + '.json'), tail);
-    if (code !== 0 || !fs.existsSync(base + '.json')) throw new Error('Распознавание не получилось (код ' + code + '). ' + tail.slice(-2).join(' | ').slice(0, 300));
-    return fs.readFileSync(base + '.json', 'utf8');
-  } catch (err) {
-    logLine('whisper: ошибка', String((err && err.stack) || err));
-    if (ctrl.signal.aborted) return null;
-    throw err;
-  } finally {
-    job = null;
-    fs.rmSync(tmp, { recursive: true, force: true });
-  }
-});
 ipcMain.on('log', (_e, m) => logLine('окно:', String(m).slice(0, 2000)));
-ipcMain.handle('whisper:cancel', () => {
-  if (!job) return;
-  job.ctrl.abort();
-  if (job.proc) job.proc.kill();
-});
-ipcMain.handle('whisper:ready', () => fs.existsSync(path.join(W_DIR(), MODEL)) && !!findFile(path.join(W_DIR(), 'bin'), 'whisper-cli.exe'));
 
 // ==================== стрелки везде, как в Soundpad ====================
 // Пока включено, ← и → принадлежат Linea во всех программах: переключают песни, даже если окно свёрнуто
