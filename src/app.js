@@ -868,37 +868,83 @@ async function waveOf(song) {
     if (song === cur) waveDirty = true;
   } catch { /* не декодируется — останется ровная полоска */ }
 }
-// полоса перемотки: обычно тонкая линия, под мышкой плавно «вырастает» в волну битов
-let waveMorph = 0, waveHover = false;
+// полоса перемотки: сыгранная часть — живая волна (как загрузка в Google Play), по ней бежит котокролик;
+// под мышкой полоса плавно «вырастает» в столбики битов
+let waveMorph = 0, waveHover = false, waveAmp = 0, waveLast = performance.now(), wavePhase = 0;
+const CR = { fur: '#E7A15A', dark: '#C9783A', cream: '#F7DDB8', ear: '#D98E4C', eye: '#1E1612', nose: '#E8A0A0' };
+// котокролик сбоку: рыжий, уши висят и хлопают на бегу; t — время, run — бежит или сидит
+function drawCatRabbit(x, cx, gy, t, run) {
+  const k = run ? Math.sin(t * 18) : 0, bob = run ? -Math.abs(Math.sin(t * 18)) * 2.2 : 0;
+  x.save();
+  x.translate(cx, gy + bob);
+  // лапки: на бегу перебирают, сидя — поджаты
+  x.fillStyle = CR.dark;
+  const legs = run ? [[-6, k], [-2, -k], [4, -k], [8, k]] : [[-5, 0], [6, 0]];
+  for (const [lx, ph] of legs) { x.beginPath(); x.ellipse(lx + ph * 2.2, -1.6, 2.1, 2.4, 0, 0, 6.283); x.fill(); }
+  // хвостик-помпон
+  x.fillStyle = CR.cream; x.beginPath(); x.arc(-11.5, -9, 2.8, 0, 6.283); x.fill();
+  // туловище и светлое брюшко
+  x.fillStyle = CR.fur; x.beginPath(); x.ellipse(-1, -8.5, 10.5, 7.2, 0, 0, 6.283); x.fill();
+  x.fillStyle = CR.cream; x.beginPath(); x.ellipse(1, -5.2, 7, 3.4, 0, 0, 6.283); x.fill();
+  // полоски на спине
+  x.strokeStyle = CR.dark; x.lineWidth = 1.3; x.lineCap = 'round';
+  for (const sx of [-6, -2, 2]) { x.beginPath(); x.moveTo(sx, -15); x.lineTo(sx + 1.2, -12); x.stroke(); }
+  // голова
+  x.fillStyle = CR.fur; x.beginPath(); x.arc(8.5, -15, 7, 0, 6.283); x.fill();
+  x.fillStyle = CR.cream; x.beginPath(); x.ellipse(11.6, -12.6, 3.4, 2.6, 0, 0, 6.283); x.fill();
+  x.strokeStyle = CR.dark; x.beginPath(); x.moveTo(7, -21.2); x.lineTo(7.8, -18.6); x.moveTo(9.6, -21.6); x.lineTo(9.8, -18.8); x.stroke();
+  // вислые уши свисают по бокам головы и хлопают на бегу
+  const flap = run ? Math.sin(t * 18 + 1) * 0.3 : 0;
+  x.strokeStyle = CR.dark; x.lineWidth = 0.8;
+  x.fillStyle = CR.dark; x.save(); x.translate(9.5, -20); x.rotate(0.15 + flap * 0.6);
+  x.beginPath(); x.ellipse(0.5, 6.5, 2.6, 7.2, 0, 0, 6.283); x.fill(); x.restore();
+  x.fillStyle = CR.ear; x.save(); x.translate(6.2, -20.5); x.rotate(0.35 + flap);
+  x.beginPath(); x.ellipse(-0.5, 7, 3.4, 8, 0, 0, 6.283); x.fill(); x.stroke(); x.restore();
+  // глаз, блик и розовый нос
+  x.fillStyle = CR.eye; x.beginPath(); x.arc(11, -16, 1.7, 0, 6.283); x.fill();
+  x.fillStyle = '#fff'; x.beginPath(); x.arc(11.5, -16.6, 0.55, 0, 6.283); x.fill();
+  x.fillStyle = CR.nose; x.beginPath(); x.arc(14.6, -13.6, 1.1, 0, 6.283); x.fill();
+  x.restore();
+}
 function drawWave() {
   const cv = $('waveCv'), w = cv.clientWidth, h = cv.clientHeight, dpr = devicePixelRatio || 1;
   if (!w) return;
+  const now = performance.now(), dt = Math.min(0.05, (now - waveLast) / 1000);
+  waveLast = now;
   const v = cur && audio.duration ? (seeking ? $('seek').value / 1000 : audio.currentTime / audio.duration) : 0;
-  const px = Math.round(v * w);
+  const px = Math.round(v * w), playing = !!cur && !audio.paused;
   const target = waveHover || seeking ? 1 : 0;
-  const moving = Math.abs(target - waveMorph) > 0.002;
-  if (moving) waveMorph += (target - waveMorph) * 0.16; else waveMorph = target;
-  if (cv.width !== Math.round(w * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); waveDirty = true; }
-  if (!waveDirty && !moving && px === wavePx) return;
-  waveDirty = false; wavePx = px;
+  waveMorph += (target - waveMorph) * Math.min(1, dt * 10);
+  waveAmp += ((playing ? 1 : 0) - waveAmp) * Math.min(1, dt * 4); // на паузе волна плавно выпрямляется
+  wavePhase += dt * 6 * waveAmp;
+  if (cv.width !== Math.round(w * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
   const x = cv.getContext('2d'), wave = cur && cur.wave, step = 5, n = Math.floor(w / step), m = waveMorph * waveMorph * (3 - 2 * waveMorph);
   const a1 = getComputedStyle(document.documentElement).getPropertyValue('--a1').trim() || '#fff';
-  const line = 4, bw = step - 2 * m; // при m=0 столбики сливаются в сплошную линию
+  const line = 4, mid = h / 2 + 8, rest = `rgba(${fgRGB()},.22)`;
+  const A = 3.2 * waveAmp * (1 - m), L = 26;
+  const wy = (xx) => mid + A * Math.min(1, xx / 14) * Math.sin((xx / L) * 6.283 - wavePhase);
   x.setTransform(dpr, 0, 0, dpr, 0, 0);
   x.clearRect(0, 0, w, h);
-  if (m < 0.03) { // спокойное состояние — ровная тонкая полоса
-    x.fillStyle = `rgba(${fgRGB()},.22)`; x.beginPath(); x.roundRect(0, (h - line) / 2, w, line, line / 2); x.fill();
-    x.fillStyle = a1; x.beginPath(); x.roundRect(0, (h - line) / 2, Math.max(line, px), line, line / 2); x.fill();
-    return;
+  let ground = mid;
+  if (m < 0.03) {
+    x.fillStyle = rest; x.beginPath(); x.roundRect(px, mid - line / 2, Math.max(0, w - px), line, line / 2); x.fill();
+    // сыгранная часть — волна
+    x.strokeStyle = a1; x.lineWidth = line; x.lineCap = 'round'; x.lineJoin = 'round';
+    x.beginPath(); x.moveTo(0, wy(0));
+    for (let xx = 2; xx <= px; xx += 2) x.lineTo(xx, wy(xx));
+    x.stroke();
+    ground = wy(px) - line / 2;
+  } else {
+    const bw = step - 2 * m;
+    for (let k = 0; k < n; k++) {
+      const amp = wave ? wave[Math.floor((k / n) * wave.length)] : 0.3;
+      const bh = line + (Math.max(3, amp * (h - 34)) - line) * m, bx = k * step;
+      x.fillStyle = bx + bw / 2 <= px ? a1 : rest;
+      x.beginPath(); x.roundRect(bx, mid - bh / 2, bw + 0.5 * (1 - m), bh, m > 0.2 ? 1.5 : 0); x.fill();
+      if (bx <= px && px < bx + step) ground = mid - bh / 2;
+    }
   }
-  for (let k = 0; k < n; k++) {
-    const amp = wave ? wave[Math.floor((k / n) * wave.length)] : 0.3;
-    const bh = line + (Math.max(3, amp * (h - 4)) - line) * m, bx = k * step;
-    x.fillStyle = bx + bw / 2 <= px ? a1 : `rgba(${fgRGB()},.22)`;
-    x.beginPath();
-    x.roundRect(bx, (h - bh) / 2, bw + 0.5 * (1 - m), bh, m > 0.2 ? 1.5 : 0);
-    x.fill();
-  }
+  if (cur) drawCatRabbit(x, Math.max(10, Math.min(w - 16, px)), ground, now / 1000, playing);
 }
 $('seek').parentElement.addEventListener('pointerenter', () => { waveHover = true; });
 $('seek').parentElement.addEventListener('pointerleave', () => { waveHover = false; });
