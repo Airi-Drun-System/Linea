@@ -83,4 +83,29 @@ function splitTitle(title, author) {
   if (m) { a = m[1].trim(); t = m[2].trim(); } else if (a && t.endsWith(' by ' + a)) t = t.slice(0, -(' by ' + a).length);
   return { name: t || 'Без названия', artist: a };
 }
-if (typeof module !== 'undefined') module.exports = { hashStr, rng, fmtDur, cleanName, parseLRC, lineAt, retextLine, peaks, parseNetUrl, splitTitle };
+// слова с таймингами из lrclib.net; getJson(url) → объект или null (404). Общая для ПК и телефона
+async function lrclibFind(getJson, q) {
+  const title = String((q && q.title) || '').slice(0, 200).trim();
+  const artist = String((q && q.artist) || '').slice(0, 200).trim();
+  const duration = Math.round(Number(q && q.duration) || 0);
+  if (!title) return null;
+  try {
+    let plain = null;
+    if (artist) {
+      const exact = await getJson(`https://lrclib.net/api/get?track_name=${encodeURIComponent(title)}&artist_name=${encodeURIComponent(artist)}${duration ? `&duration=${duration}` : ''}`);
+      if (exact && exact.syncedLyrics) return { synced: exact.syncedLyrics };
+      plain = (exact && exact.plainLyrics) || null;
+    }
+    const list = (await getJson(`https://lrclib.net/api/search?q=${encodeURIComponent(`${artist} ${title}`.trim())}`)) || [];
+    // только песни близкой длины, самая близкая первой
+    const near = (x) => !duration || Math.abs((x.duration || 0) - duration) <= 8;
+    const byDur = (a, b) => Math.abs((a.duration || 0) - duration) - Math.abs((b.duration || 0) - duration);
+    const synced = list.filter((x) => x.syncedLyrics && near(x)).sort(byDur)[0];
+    if (synced) return { synced: synced.syncedLyrics };
+    // текст без таймингов тоже пригодится: его можно разметить пробелом в плеере;
+    // при поиске по названию оригинала (для мешапа) подойдёт и текст от трека другой длины
+    if (!plain) { const p = list.filter((x) => x.plainLyrics && (q.loose || near(x))).sort(byDur)[0]; plain = p ? p.plainLyrics : null; }
+    return plain ? { plain } : null;
+  } catch { return null; }
+}
+if (typeof module !== 'undefined') module.exports = { lrclibFind, hashStr, rng, fmtDur, cleanName, parseLRC, lineAt, retextLine, peaks, parseNetUrl, splitTitle };

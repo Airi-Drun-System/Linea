@@ -19,7 +19,7 @@ contextBridge.exposeInMainWorld('lnApp', {
   sepCancel: () => ipcRenderer.invoke('sep:cancel'),
   sepReady: () => ipcRenderer.invoke('sep:ready'),
   onSep: (fn) => ipcRenderer.on('sep:progress', (_e, d) => fn(d)),
-  netPort: () => ipcRenderer.invoke('net:port'),
+  bridgeUrl: () => ipcRenderer.invoke('net:port').then((p) => `http://127.0.0.1:${p}/player.html`),
   oembed: (kind, url) => ipcRenderer.invoke('net:oembed', kind, url),
   netImg: (url) => ipcRenderer.invoke('net:img', url),
   netFile: (url) => ipcRenderer.invoke('net:file', url),

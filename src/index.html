@@ -2,7 +2,8 @@
 <html lang="ru">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self'; frame-src http://127.0.0.1:*">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self'; frame-src 'self' http://127.0.0.1:*; connect-src 'self' https:">
 <title>Linea</title>
 <style>
 @font-face{font-family:"Dela Gothic One";font-weight:400;font-display:block;src:url(fonts/dela-gothic-one-cyrillic-400-normal.woff2) format("woff2");unicode-range:U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116}
@@ -340,6 +341,20 @@ body.liquid .over{backdrop-filter:blur(6px);background:rgba(var(--shade-rgb),.35
   body.libHide .app{left:0}
 }
 @media (max-height:700px){.center{gap:10px}#play{width:60px;height:60px}.step{width:46px;height:46px}.meta h1{font-size:24px}}
+/* телефон и планшет (Android) */
+html.mobile .vol,html.mobile .keys,html.mobile .winBtns{display:none}
+html.mobile .topbar{-webkit-app-region:none;margin-top:0}
+html.mobile .stage .cover{height:auto;width:min(100cqw,100cqh,560px)}
+html.mobile .stage.yt .cover{width:min(100cqw,calc(100cqh*16/9),900px)}
+html.mobile button,html.mobile .song,html.mobile .pl{-webkit-tap-highlight-color:transparent}
+@media (orientation:landscape) and (max-height:560px){
+  html.mobile .app{padding:6px 20px 10px}
+  html.mobile .center{display:grid;width:100%;grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-rows:1fr repeat(6,auto) 1fr;column-gap:28px;row-gap:8px;justify-items:center;align-items:center}
+  html.mobile .stage{grid-column:1;grid-row:1/-1;height:100%}
+  html.mobile .center>:not(.stage){grid-column:2}
+  html.mobile .meta{grid-row:2}html.mobile .seek{grid-row:3}html.mobile .btns{grid-row:4}html.mobile .modes{grid-row:5}html.mobile .up{grid-row:6}html.mobile .syncBar{grid-row:7}
+  html.mobile #play{width:60px;height:60px}
+}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 </head>
@@ -504,7 +519,9 @@ body.liquid .over{backdrop-filter:blur(6px);background:rgba(var(--shade-rgb),.35
   <div class="card"><h3 id="loadTitle"></h3><p id="loadText"></p><div class="bar"><i id="loadBar"></i></div><div class="acts" id="loadActs" hidden><button id="loadCancel">Отмена</button></div></div>
 </div>
 
+<script src="build.js"></script>
 <script src="lib.js"></script>
+<script src="mobile.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

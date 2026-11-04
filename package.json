@@ -12,6 +12,9 @@
     "dist": "electron-builder --win nsis portable --publish never"
   },
   "devDependencies": {
+    "@capacitor/android": "^6.2.3",
+    "@capacitor/cli": "^6.2.3",
+    "@capacitor/core": "^6.2.3",
     "electron": "33.2.1",
     "electron-builder": "25.1.8"
   },

@@ -61,30 +61,8 @@ async function getJson(url) {
   if (!r.ok) throw new Error(`lrclib ответил ${r.status}`);
   return r.json();
 }
-ipcMain.handle('lyrics:find', async (_e, q) => {
-  const title = String((q && q.title) || '').slice(0, 200).trim();
-  const artist = String((q && q.artist) || '').slice(0, 200).trim();
-  const duration = Math.round(Number(q && q.duration) || 0);
-  if (!title) return null;
-  try {
-    let plain = null;
-    if (artist) {
-      const exact = await getJson(`https://lrclib.net/api/get?track_name=${encodeURIComponent(title)}&artist_name=${encodeURIComponent(artist)}${duration ? `&duration=${duration}` : ''}`);
-      if (exact && exact.syncedLyrics) return { synced: exact.syncedLyrics };
-      plain = (exact && exact.plainLyrics) || null;
-    }
-    const list = (await getJson(`https://lrclib.net/api/search?q=${encodeURIComponent(`${artist} ${title}`.trim())}`)) || [];
-    // только песни близкой длины, самая близкая первой
-    const near = (x) => !duration || Math.abs((x.duration || 0) - duration) <= 8;
-    const byDur = (a, b) => Math.abs((a.duration || 0) - duration) - Math.abs((b.duration || 0) - duration);
-    const synced = list.filter((x) => x.syncedLyrics && near(x)).sort(byDur)[0];
-    if (synced) return { synced: synced.syncedLyrics };
-    // текст без таймингов тоже пригодится: его можно разметить пробелом в плеере
-    // поиск по названию оригинала (для мешапа): текст подойдёт и от трека другой длины
-    if (!plain) { const p = list.filter((x) => x.plainLyrics && (q.loose || near(x))).sort(byDur)[0]; plain = p ? p.plainLyrics : null; }
-    return plain ? { plain } : null;
-  } catch { return null; }
-});
+const { lrclibFind } = require('./src/lib.js');
+ipcMain.handle('lyrics:find', (_e, q) => lrclibFind(getJson, q));
 
 
 // ==================== скачивание больших файлов (модель для минуса) ====================

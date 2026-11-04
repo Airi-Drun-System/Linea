@@ -8,6 +8,7 @@ const store = {
 };
 const settings = Object.assign({ volume: 0.8 }, store.get('ln.settings', {}));
 const saveSettings = () => store.set('ln.settings', settings);
+if (window.lnApp && window.lnApp.mobile && !settings.glass) settings.glass = 'plain'; // жидкое стекло слишком тяжёлое для телефона
 
 // песни лежат в IndexedDB вместе с файлом: библиотека переживает перезапуск
 const DB = (() => {
@@ -161,7 +162,7 @@ const decks = [new Audio(), new Audio()];
 let audio = decks[0]; // та, что играет сейчас
 const deckUrl = new Map(), deckGain = new Map();
 decks.forEach((d) => { d.volume = settings.volume; d.preservesPitch = false; });
-// песни с SoundCloud и YouTube играют их официальные плееры в «мостике» (iframe с localhost, см. main.js).
+// песни с SoundCloud и YouTube играют их официальные плееры в «мостике» (iframe с http(s)-адреса: на ПК localhost из main.js, на телефоне свой адрес приложения).
 // Снаружи мостик выглядит как ещё одна дека <audio>: те же currentTime, paused, play() и события,
 // поэтому слова, полоса, оверлей и клавиши работают с ним без переделок
 let bridgeEl = null, bridgeOrigin = '', bridgeUp = false, bridgeQ = [], openN = 0, listReq = 0;
@@ -169,13 +170,13 @@ const listWait = new Map();
 function bridge(m) {
   if (bridgeUp) { bridgeEl.contentWindow.postMessage(m, bridgeOrigin); return; }
   bridgeQ.push(m);
-  if (bridgeEl || !window.lnApp || !window.lnApp.netPort) return;
+  if (bridgeEl || !window.lnApp || !window.lnApp.bridgeUrl) return;
   bridgeEl = document.createElement('iframe');
   bridgeEl.className = 'bridge';
   bridgeEl.allow = 'autoplay; encrypted-media';
   bridgeEl.title = 'Плеер';
   document.querySelector('.cover').appendChild(bridgeEl);
-  window.lnApp.netPort().then((port) => { bridgeOrigin = `http://127.0.0.1:${port}`; bridgeEl.src = `${bridgeOrigin}/player.html`; })
+  window.lnApp.bridgeUrl().then((u) => { bridgeOrigin = new URL(u).origin; bridgeEl.src = u; })
     .catch(() => toast('Не запустился плеер для SoundCloud и YouTube'));
 }
 class NetDeck extends EventTarget {
@@ -734,7 +735,7 @@ function renderBgDlg() {
   $('ovOn').checked = !!settings.overlay;
   $('ovMove').hidden = !settings.overlay;
   $('ovMove').textContent = ovMove ? 'Готово' : 'Подвинуть';
-  document.querySelectorAll('.pcOnly').forEach((el) => { el.hidden = !window.lnApp; });
+  document.querySelectorAll('.pcOnly').forEach((el) => { el.hidden = !window.lnApp || !!window.lnApp.mobile; });
   $('bgSong').textContent = cur && cur.bg ? 'Убрать картинку этой песни' : 'Своя картинка для этой песни';
   $('bgSong').disabled = !cur;
   const box = $('bgThumbs');
@@ -929,7 +930,7 @@ async function load(song, autoplay) {
     audio.preservesPitch = false; // sped up и slowed как в тиктоке: вместе с темпом меняется и тон
   }
   showSong(); upText(); renderSongs();
-  feedOnLoad(song); likeBtn();
+  feedOnLoad(song); likeBtn(); mediaPush();
   if (slideDir) { const c = document.querySelector('.cover'); c.classList.remove('inNext', 'inPrev'); void c.offsetWidth; c.classList.add(slideDir > 0 ? 'inNext' : 'inPrev'); slideDir = 0; }
   waveDirty = true;
   if (!song.wave && song.blob) waveOf(song);
@@ -969,12 +970,14 @@ function setVolume(v) {
   saveSettings();
 }
 // события слушаем у обеих дек, но реагируем только на текущую
+// телефон: уведомление с названием и кнопками, пока играет музыка
+const mediaPush = () => { if (cur && window.lnApp && window.lnApp.media) window.lnApp.media({ title: cur.name, artist: cur.artist || '', playing: !audio.paused }); };
 const onDeck = (ev, fn) => [...decks, net].forEach((d) => d.addEventListener(ev, (e) => { if (e.target === audio) fn(e); }));
 let xfading = false;
-onDeck('play', () => { vSync(true);  $('play').querySelector('path').setAttribute('d', PATH.pause); $('play').ariaLabel = 'Пауза'; });
+onDeck('play', () => { vSync(true); mediaPush();  $('play').querySelector('path').setAttribute('d', PATH.pause); $('play').ariaLabel = 'Пауза'; });
 onDeck('seeked', () => vSync(true));
 onDeck('ratechange', () => vSync(false));
-onDeck('pause', () => { vSync(false);  $('play').querySelector('path').setAttribute('d', PATH.play); $('play').ariaLabel = 'Играть'; });
+onDeck('pause', () => { vSync(false); mediaPush();  $('play').querySelector('path').setAttribute('d', PATH.play); $('play').ariaLabel = 'Играть'; });
 // за несколько секунд до конца начинаем следующую — получается переход без тишины
 onDeck('timeupdate', () => {
   if (!settings.xfade || settings.repeat || sync || xfading || !audio.duration || audio.paused || audio === net) return;
@@ -1251,6 +1254,20 @@ $('spd').addEventListener('click', () => {
 $('shuf').addEventListener('click', () => { settings.shuffle = !settings.shuffle; saveSettings(); showModes(); upText(); });
 $('rep').addEventListener('click', () => { settings.repeat = !settings.repeat; saveSettings(); showModes(); });
 
+// свайп пальцем по обложке или словам: вверх или влево — следующая, вниз или вправо — предыдущая
+let swipe = null;
+$('stage').addEventListener('pointerdown', (e) => { if (e.pointerType === 'touch') swipe = { x: e.clientX, y: e.clientY, t: performance.now() }; });
+$('stage').addEventListener('pointerup', (e) => {
+  if (!swipe || e.pointerType !== 'touch') return;
+  const dx = e.clientX - swipe.x, dy = e.clientY - swipe.y, fast = performance.now() - swipe.t < 600;
+  swipe = null;
+  const d = Math.abs(dy) > Math.abs(dx) ? dy : dx;
+  if (!fast || Math.abs(d) < 60 || sync) return;
+  e.preventDefault();
+  slideDir = d < 0 ? 1 : -1;
+  if (d < 0) step(1); else step(-1);
+});
+$('stage').addEventListener('pointercancel', () => { swipe = null; });
 // колесо мыши по обложке листает треки, как свайп в телефоне
 let wheelAcc = 0, wheelAt = 0;
 document.querySelector('.cover').addEventListener('wheel', (e) => {
@@ -1285,7 +1302,7 @@ async function setGlobalKeys(on, quiet) {
   const ok = await window.lnApp.globalKeys(on);
   if (on && !ok && !quiet) toast('Стрелки уже заняты другой программой');
 }
-if (window.lnApp && window.lnApp.onStep) window.lnApp.onStep((d) => (d === 'trayTold' ? (settings.trayTold = true, saveSettings()) : d === 'already' ? toast('Linea уже открыта — вот она') : d === 'play' ? play() : d === 'pause' ? audio.pause() : step(d)));
+if (window.lnApp && window.lnApp.onStep) window.lnApp.onStep((d) => (d === 'trayTold' ? (settings.trayTold = true, saveSettings()) : d === 'already' ? toast('Linea уже открыта — вот она') : d === 'play' ? play() : d === 'pause' ? audio.pause() : d === 'toggle' ? toggle() : step(d)));
 
 let ovMove = false, ovLast = '';
 function ovApply() { if (window.lnApp && window.lnApp.overlay) window.lnApp.overlay({ on: !!settings.overlay, move: ovMove }); }

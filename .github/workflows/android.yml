@@ -1,0 +1,74 @@
+name: Build Android
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    env:
+      LN_BUILD: ${{ github.run_number }}
+      LN_VERSION: 0.3.${{ github.run_number }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - run: npm ci --ignore-scripts
+      - run: npm test
+      - run: node scripts/mobile-build.js
+      - run: npx cap add android
+      - run: node mobile/patch.js
+      # иконка — серый куб во все плотности, заставка — тёмный фон с кубом
+      - name: Icons and splash
+        run: |
+          set -e
+          command -v convert || { sudo apt-get update -qq && sudo apt-get install -y -qq imagemagick; }
+          R=android/app/src/main/res
+          rm -rf $R/mipmap-anydpi-v26
+          for d in mdpi:48 hdpi:72 xhdpi:96 xxhdpi:144 xxxhdpi:192; do
+            n=${d%%:*}; s=${d##*:}
+            convert build/icon.png -resize ${s}x${s} $R/mipmap-$n/ic_launcher.png
+            cp $R/mipmap-$n/ic_launcher.png $R/mipmap-$n/ic_launcher_round.png
+            rm -f $R/mipmap-$n/ic_launcher_foreground.png
+          done
+          for f in $(find $R -name splash.png); do
+            w=$(identify -format %w $f); h=$(identify -format %h $f); i=$(( (w<h?w:h)/3 ))
+            convert -size ${w}x${h} xc:'#09090D' \( build/icon.png -resize ${i}x${i} \) -gravity center -composite $f
+          done
+      # один и тот же ключ подписи у всех сборок, иначе новая версия не встанет поверх старой
+      - name: Signing key
+        env:
+          KS: ${{ secrets.LN_DEBUG_KEYSTORE }}
+        run: |
+          test -n "$KS" || { echo "Нет секрета LN_DEBUG_KEYSTORE"; exit 1; }
+          mkdir -p ~/.android && echo "$KS" | base64 -d > ~/.android/debug.keystore
+      - run: npx cap sync android
+      - run: ./gradlew assembleDebug --no-daemon
+        working-directory: android
+      - run: |
+          cp android/app/build/outputs/apk/debug/app-debug.apk Linea-android.apk
+          echo "{\"build\": $LN_BUILD, \"version\": \"$LN_VERSION\"}" > android.json
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: android
+          name: Linea — Android
+          prerelease: true
+          make_latest: false
+          target_commitish: ${{ github.sha }}
+          body: |
+            Linea для телефонов и планшетов на Android (APK, ставится вручную).
+            Версия ${{ env.LN_VERSION }}. Обновления Linea проверяет сама и предлагает скачать.
+          files: |
+            Linea-android.apk
+            android.json

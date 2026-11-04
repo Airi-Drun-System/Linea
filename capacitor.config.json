@@ -1,0 +1,7 @@
+{
+  "appId": "com.vegasdev.linea",
+  "appName": "Linea",
+  "webDir": "www",
+  "android": { "backgroundColor": "#09090D" },
+  "plugins": { "CapacitorHttp": { "enabled": true } }
+}

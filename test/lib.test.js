@@ -1,6 +1,6 @@
 'use strict';
 const assert = require('assert');
-const { parseLRC, lineAt, fmtDur, cleanName, retextLine, peaks, parseNetUrl, splitTitle } = require('../src/lib.js');
+const { parseLRC, lineAt, fmtDur, cleanName, retextLine, peaks, parseNetUrl, splitTitle, lrclibFind } = require('../src/lib.js');
 
 const L = parseLRC('[ar:x]\n[00:01.50]раз\n[00:00.20][00:03.00]два\nбез метки\n[01:02.5]три');
 assert.deepStrictEqual(L.map((l) => [Math.round(l.t), l.text]), [[200, 'два'], [1500, 'раз'], [3000, 'два'], [62500, 'три']]);
@@ -38,4 +38,14 @@ assert.deepStrictEqual(splitTitle('Кино - Группа крови (Official 
 assert.deepStrictEqual(splitTitle('Blinding Lights', 'The Weeknd - Topic'), { name: 'Blinding Lights', artist: 'The Weeknd' });
 assert.deepStrictEqual(splitTitle('mashup v2 by djx', 'djx'), { name: 'mashup v2', artist: 'djx' });
 assert.deepStrictEqual(splitTitle('Song [Lyric Video]', ''), { name: 'Song', artist: '' });
-console.log('lib: ok');
+// слова: точное совпадение, потом поиск с близкой длиной
+(async () => {
+  const db = { get: { plainLyrics: 'p' }, search: [{ duration: 300, syncedLyrics: 'far' }, { duration: 182, syncedLyrics: 'near' }] };
+  const gj = async (u) => (u.includes('/api/get') ? db.get : db.search);
+  assert.deepStrictEqual(await lrclibFind(gj, { title: 'x', artist: 'y', duration: 180 }), { synced: 'near' });
+  db.search = [];
+  assert.deepStrictEqual(await lrclibFind(gj, { title: 'x', artist: 'y', duration: 180 }), { plain: 'p' });
+  assert.strictEqual(await lrclibFind(gj, { title: '' }), null);
+  assert.strictEqual(await lrclibFind(async () => { throw new Error('net'); }, { title: 'x' }), null);
+  console.log('lib: ok');
+})();
