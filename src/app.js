@@ -332,7 +332,7 @@ async function netSong(it) {
     if (o) { title = o.title; author = o.author_name; thumb = o.thumbnail_url; }
   }
   const song = Object.assign({ id: netId(it), kind: it.kind, duration: it.dur || 0, added: Date.now(), cover: await netCover(it, thumb) }, splitTitle(title, author));
-  if (it.kind === 'yt') song.vid = it.vid; else song.url = it.url;
+  if (it.kind === 'yt') song.vid = it.vid; else { song.url = it.url; if (/^https:/.test(it.art || thumb)) song.art = it.art || thumb; } // обложка по ссылке — для Discord
   if (!title) { song.noName = true; song.name = it.kind === 'yt' ? 'Видео с YouTube' : 'Трек с SoundCloud'; }
   return song;
 }
@@ -775,6 +775,7 @@ function renderBgDlg() {
   $('lyrSize').value = settings.lyrScale || 1; $('lyrSizeV').textContent = Math.round((settings.lyrScale || 1) * 100) + '%';
   $('trayOn').checked = settings.tray !== false;
   $('ytKey').value = settings.ytKey || '';
+  $('dcId').value = settings.dcId || '';
   updRefresh();
   document.querySelectorAll('#themeSeg button').forEach((b) => b.classList.toggle('on', b.dataset.th === (settings.theme || 'dark')));
   $('sideA').value = settings.sideA || 0.55; $('sideAV').textContent = Math.round((1 - (settings.sideA || 0.55)) * 100) + '%';
@@ -1057,6 +1058,7 @@ const mediaPush = () => { if (cur && window.lnApp && window.lnApp.media) window.
 // ПК: плашка Windows (SMTC), «динамический остров» и медиаклавиши берут название, обложку, время и кнопки из navigator.mediaSession
 let msKey = '', keep = null, keepT = 0;
 function msPush() {
+  dcPush();
   const ms = navigator.mediaSession;
   if (!ms) return;
   keepSync();
@@ -1069,6 +1071,19 @@ function msPush() {
     if (dur > 0) ms.setPositionState({ duration: dur, playbackRate: audio.playbackRate || 1, position: Math.min(dur, Math.max(0, audio.currentTime || 0)) });
     else ms.setPositionState(); // длина ещё неизвестна
   } catch { /* не поддерживается */ }
+}
+// ПК: в профиле Discord «Слушает» — песня, исполнитель, обложка (у своих файлов — иконка приложения) и сколько осталось
+function dcPush() {
+  if (!window.lnApp || !window.lnApp.discord) return;
+  if (!settings.dcId || !cur || audio.paused) { window.lnApp.discord(settings.dcId || '', null); return; }
+  const rate = audio.playbackRate || 1, dur = audio.duration > 0 && isFinite(audio.duration) ? audio.duration : (cur.duration || 0) / 1000;
+  const start = Math.round(Date.now() - ((audio.currentTime || 0) * 1000) / rate), artist = cur.artist || '';
+  const img = cur.kind === 'yt' ? cur.vid && `https://i.ytimg.com/vi/${cur.vid}/mqdefault.jpg` : cur.art;
+  window.lnApp.discord(settings.dcId, {
+    type: 2, details: cur.name.slice(0, 128), state: artist.length > 1 ? artist.slice(0, 128) : undefined,
+    timestamps: dur > 0 ? { start, end: Math.round(start + (dur * 1000) / rate) } : { start },
+    assets: img ? { large_image: img } : undefined,
+  });
 }
 // треки SoundCloud и YouTube звучат в iframe-мостике, а у главного окна своего играющего медиа нет, и тогда Chromium
 // не отдаёт Windows его navigator.mediaSession. Поэтому, пока играет мостик, здесь крутится зацикленная тишина.
@@ -1369,6 +1384,7 @@ $('sGo').addEventListener('click', searchGo);
 $('sIn').addEventListener('keydown', (e) => { if (e.key === 'Enter') searchGo(); if (e.key === 'Escape') $('searchDlg').hidden = true; });
 $('sClose').addEventListener('click', () => { $('searchDlg').hidden = true; });
 $('ytKey').addEventListener('change', () => { settings.ytKey = $('ytKey').value.trim(); saveSettings(); });
+$('dcId').addEventListener('change', () => { settings.dcId = $('dcId').value.replace(/\D/g, ''); $('dcId').value = settings.dcId; saveSettings(); dcPush(); });
 $('ytKeyChk').addEventListener('click', async () => {
   settings.ytKey = $('ytKey').value.trim(); saveSettings();
   try { await ytSearch('test ' + Date.now(), 1); toast('Ключ работает, поиск включён'); } catch (e) { toast(e.message); }

@@ -1,7 +1,7 @@
 'use strict';
 const { contextBridge, ipcRenderer } = require('electron');
 
-// окну плеера доступно только это: поиск слов, минус, оверлей и клавиши
+// окну плеера доступно только это: поиск слов, минус, оверлей, клавиши и статус в Discord
 contextBridge.exposeInMainWorld('lnApp', {
   findLyrics: (q) => ipcRenderer.invoke('lyrics:find', q),
   log: (m) => ipcRenderer.send('log', m),
@@ -15,6 +15,7 @@ contextBridge.exposeInMainWorld('lnApp', {
   onStep: (fn) => ipcRenderer.on('keys:step', (_e, d) => fn(d)),
   overlay: (q) => ipcRenderer.invoke('overlay:set', q),
   overlayState: (st) => ipcRenderer.send('overlay:state', st),
+  discord: (id, act) => ipcRenderer.send('discord:set', id, act),
   separate: (q) => ipcRenderer.invoke('sep:run', q),
   sepCancel: () => ipcRenderer.invoke('sep:cancel'),
   sepReady: () => ipcRenderer.invoke('sep:ready'),

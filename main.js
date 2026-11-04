@@ -3,6 +3,7 @@ const { app, BrowserWindow, ipcMain, net, globalShortcut, screen, Tray, Menu, na
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const { createConnection } = require('net');
 
 // музыка играет и в свёрнутом окне без задержек
 app.commandLine.appendSwitch('disable-renderer-backgrounding');
@@ -250,6 +251,58 @@ ipcMain.on('app:prefs', (_e, q) => {
     if (win && !img.isEmpty()) win.setIcon(img);
     if (tray && !img.isEmpty()) tray.setImage(img.resize({ width: 32, height: 32 }));
   }
+});
+// ==================== Discord: «Слушает» в профиле ====================
+// Discord на компьютере принимает статус через локальный канал discord-ipc-0…9: кадр — код и длина (по 4 байта) и JSON.
+// Протокол короткий, поэтому без сторонних библиотек
+let dc = null, dcId = '', dcBad = '', dcAct = null, dcBusy = false, dcLast = 0, dcT = null, dcRetry = null;
+function dcFrame(op, data) {
+  const b = Buffer.from(JSON.stringify(data)), h = Buffer.alloc(8);
+  h.writeInt32LE(op, 0); h.writeInt32LE(b.length, 4);
+  return Buffer.concat([h, b]);
+}
+function dcOpen(i = 0) {
+  if (dc || dcBusy || !dcId || !dcAct || dcId === dcBad) return;
+  dcBusy = true;
+  const id = dcId, dir = process.platform === 'win32' ? '\\\\?\\pipe\\' : `${process.env.XDG_RUNTIME_DIR || os.tmpdir()}/`;
+  const s = createConnection(dir + 'discord-ipc-' + i);
+  let buf = Buffer.alloc(0), ready = false, bad = false;
+  s.on('connect', () => s.write(dcFrame(0, { v: 1, client_id: id })));
+  s.on('data', (d) => {
+    buf = Buffer.concat([buf, d]);
+    while (buf.length >= 8 && buf.length >= 8 + buf.readInt32LE(4)) {
+      const op = buf.readInt32LE(0), n = buf.readInt32LE(4);
+      let m = null;
+      try { m = JSON.parse(buf.subarray(8, 8 + n)); } catch { /* битый кадр пропускаем */ }
+      buf = buf.subarray(8 + n);
+      if (op === 3) s.write(dcFrame(4, m)); // пинг
+      else if (op === 2) { bad = true; dcBad = id; logLine('Discord не принял ID приложения:', m && m.message); }
+      else if (m && m.evt === 'READY') { ready = true; dcBusy = false; if (id !== dcId) s.destroy(); else { dc = s; dcSend(); } }
+      else if (m && m.evt === 'ERROR') logLine('Discord:', m.data && m.data.message);
+    }
+  });
+  s.on('error', () => {}); // Discord не запущен — тихо попробуем позже
+  s.on('close', () => {
+    if (dc === s) dc = null;
+    if (!ready) dcBusy = false;
+    if (!ready && !bad && i < 9) { dcOpen(i + 1); return; }
+    clearTimeout(dcRetry);
+    if (!bad) dcRetry = setTimeout(dcOpen, ready ? 5000 : 20000);
+  });
+}
+function dcSend() {
+  if (!dc) { dcOpen(); return; }
+  const wait = dcLast + 4000 - Date.now(); // Discord принимает не больше 5 обновлений за 20 секунд
+  if (wait > 0) { if (!dcT) dcT = setTimeout(() => { dcT = null; dcSend(); }, wait); return; }
+  dcLast = Date.now();
+  dc.write(dcFrame(1, { cmd: 'SET_ACTIVITY', args: { pid: process.pid, activity: dcAct || undefined }, nonce: String(dcLast) }));
+}
+// пустой ID — выключено; на паузе статус убираем
+ipcMain.on('discord:set', (_e, id, act) => {
+  id = /^\d{15,22}$/.test(id) ? id : '';
+  if (id !== dcId) { dcId = id; if (dc) dc.destroy(); dc = null; }
+  dcAct = id && act && typeof act === 'object' ? act : null;
+  if (dc || dcAct) dcSend();
 });
 // ==================== песни из интернета: SoundCloud и YouTube ====================
 // их официальные плееры живут в «мостике» — маленькой странице с localhost:
