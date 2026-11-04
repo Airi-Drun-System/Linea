@@ -39,7 +39,24 @@
     "nsis": {
       "artifactName": "Linea-${version}-setup.exe",
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico",
+      "installerSidebar": "build/installer-sidebar.bmp",
+      "uninstallerSidebar": "build/installer-sidebar.bmp",
+      "installerHeader": "build/installer-header.bmp",
+      "installerLanguages": [
+        "ru_RU"
+      ],
+      "language": "1049",
+      "multiLanguageInstaller": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Linea",
+      "runAfterFinish": true,
+      "perMachine": false,
+      "uninstallDisplayName": "Linea"
     },
     "portable": {
       "artifactName": "Linea-${version}-portable.exe"
