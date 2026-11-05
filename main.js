@@ -36,11 +36,11 @@ function createWindow() {
   win.webContents.on('before-input-event', (e, input) => {
     if (input.type === 'keyDown' && input.key === 'F11') { win.setFullScreen(!win.isFullScreen()); e.preventDefault(); }
   });
-  // ссылки из плеера (логотип YouTube, «Открыть на SoundCloud») — в обычном браузере
+  // ссылки из плеера (логотип YouTube, «Открыть на SoundCloud») и вход в Last.fm — в обычном браузере
   win.webContents.setWindowOpenHandler(({ url }) => {
     // «Войти» из плеера YouTube — в окне самой Linea: вход должен остаться в её куках, иначе плеер так и будет просить войти
     if (/^https:\/\/accounts\.google\.com\/|^https:\/\/(www\.)?youtube\.com\/(signin|ServiceLogin)/.test(url)) openBrowse(url);
-    else if (/^https:\/\/([a-z0-9-]+\.)?(youtube\.com|youtu\.be|soundcloud\.com)\//.test(url)) shell.openExternal(url);
+    else if (/^https:\/\/([a-z0-9-]+\.)?(youtube\.com|youtu\.be|soundcloud\.com|last\.fm)\//.test(url)) shell.openExternal(url);
     return { action: 'deny' };
   });
   win.webContents.on('will-navigate', (e) => e.preventDefault());

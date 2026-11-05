@@ -216,8 +216,35 @@ function fpsSlow(w, dt) {
   w.bad = 0;
   return true;
 }
+// MD5 для подписи запросов Last.fm (в браузере своего нет): строка в UTF-8 → 32 hex-символа
+function md5(str) {
+  const b = new TextEncoder().encode(str), n = ((b.length + 8) >> 6) + 1, w = new Uint32Array(n * 16);
+  for (let i = 0; i < b.length; i++) w[i >> 2] |= b[i] << ((i % 4) * 8);
+  w[b.length >> 2] |= 0x80 << ((b.length % 4) * 8);
+  w[n * 16 - 2] = b.length * 8;
+  const S = [7, 12, 17, 22, 5, 9, 14, 20, 4, 11, 16, 23, 6, 10, 15, 21];
+  const K = Array.from({ length: 64 }, (_, i) => Math.floor(Math.abs(Math.sin(i + 1)) * 2 ** 32));
+  const h = [0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476];
+  for (let o = 0; o < w.length; o += 16) {
+    let [A, B, C, D] = h;
+    for (let i = 0; i < 64; i++) {
+      const r = i >> 4;
+      const F = r === 0 ? (B & C) | (~B & D) : r === 1 ? (D & B) | (~D & C) : r === 2 ? B ^ C ^ D : C ^ (B | ~D);
+      const g = r === 0 ? i : r === 1 ? (5 * i + 1) % 16 : r === 2 ? (3 * i + 5) % 16 : (7 * i) % 16;
+      const s = S[r * 4 + (i % 4)], x = (A + F + K[i] + w[o + g]) | 0;
+      [A, D, C] = [D, C, B];
+      B = (B + ((x << s) | (x >>> (32 - s)))) | 0;
+    }
+    h[0] = (h[0] + A) | 0; h[1] = (h[1] + B) | 0; h[2] = (h[2] + C) | 0; h[3] = (h[3] + D) | 0;
+  }
+  return h.map((v) => [0, 8, 16, 24].map((k) => ((v >>> k) & 255).toString(16).padStart(2, '0')).join('')).join('');
+}
+// подпись Last.fm: параметры по алфавиту «имязначение» подряд, в конце секрет (format в подпись не входит)
+const fmSig = (p, secret) => md5(Object.keys(p).sort().map((k) => k + p[k]).join('') + secret);
+// когда отмечать прослушанное (правило Last.fm): треки длиннее 30 с — после половины или 4 минут, что раньше
+const fmNeed = (dur) => (dur > 30 ? Math.min(dur / 2, 240) : Infinity);
 // перенос .linea: свой файл на другом устройстве получает другой id (в нём дата файла), поэтому дубль узнаём
 // и по названию, исполнителю и длине; песни по ссылке пускаем только с настоящим адресом YouTube или SoundCloud
 const sameSong = (a, b) => a.id === b.id || (!a.kind && !b.kind && a.name === b.name && (a.artist || '') === (b.artist || '') && Math.abs((a.duration || 0) - (b.duration || 0)) < 1500);
 const netOk = (r) => (r.kind === 'yt' ? /^[\w-]{11}$/.test(r.vid) : r.kind === 'sc' ? /^https:\/\/([a-z0-9-]+\.)?soundcloud\.com\//.test(r.url) : !r.kind);
-if (typeof module !== 'undefined') module.exports = { lrclibFind, hashStr, rng, fmtDur, cleanName, parseLRC, lineAt, retextLine, peaks, voiceEnv, autoLyrics, loudness, normDb, fpsSlow, sameSong, netOk, parseNetUrl, splitTitle };
+if (typeof module !== 'undefined') module.exports = { lrclibFind, hashStr, rng, fmtDur, cleanName, parseLRC, lineAt, retextLine, peaks, voiceEnv, autoLyrics, loudness, normDb, fpsSlow, md5, fmSig, fmNeed, sameSong, netOk, parseNetUrl, splitTitle };

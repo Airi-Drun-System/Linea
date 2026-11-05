@@ -1,6 +1,6 @@
 'use strict';
 const assert = require('assert');
-const { parseLRC, lineAt, fmtDur, cleanName, retextLine, peaks, voiceEnv, autoLyrics, loudness, normDb, fpsSlow, sameSong, netOk, parseNetUrl, splitTitle, lrclibFind } = require('../src/lib.js');
+const { parseLRC, lineAt, fmtDur, cleanName, retextLine, peaks, voiceEnv, autoLyrics, loudness, normDb, fpsSlow, md5, fmSig, fmNeed, sameSong, netOk, parseNetUrl, splitTitle, lrclibFind } = require('../src/lib.js');
 
 const L = parseLRC('[ar:x]\n[00:01.50]раз\n[00:00.20][00:03.00]два\nбез метки\n[01:02.5]три');
 assert.deepStrictEqual(L.map((l) => [Math.round(l.t), l.text]), [[200, 'два'], [1500, 'раз'], [3000, 'два'], [62500, 'три']]);
@@ -93,6 +93,14 @@ assert.deepStrictEqual(fps(new Array(10).fill([...run(60, 1), 600]).flat()), [])
 assert.deepStrictEqual(fps(run(3, 13)), [5, 9]);
 assert.deepStrictEqual(fps(run(44, 4.1)).length, 1);
 assert.deepStrictEqual(fps(run(46, 10)), []);
+// Last.fm: md5 как у Node (пусто, кириллица, ровно на границе блоков, длинное); подпись — по алфавиту и с секретом
+const md5n = (x) => require('crypto').createHash('md5').update(x, 'utf8').digest('hex');
+for (const x of ['', 'a', 'The quick brown fox jumps over the lazy dog', 'привет, Linea', 'x'.repeat(55), 'x'.repeat(56), 'x'.repeat(64), 'ё'.repeat(1000)]) assert.strictEqual(md5(x), md5n(x));
+assert.strictEqual(md5('The quick brown fox jumps over the lazy dog'), '9e107d9d372bb6826bd81d3542a419d6');
+assert.strictEqual(fmSig({ token: 't1', method: 'auth.getSession', api_key: 'k' }, 'sec'), md5n('api_keykmethodauth.getSessiontokent1sec'));
+assert.strictEqual(fmNeed(20), Infinity);
+assert.strictEqual(fmNeed(200), 100);
+assert.strictEqual(fmNeed(900), 240);
 // перенос: свой файл с другим id, но тем же названием и длиной — дубль; ссылки — только настоящие
 const own = { id: 'f1', name: 'Песня', artist: 'А', duration: 180000 };
 assert.ok(sameSong(own, { id: 'f2', name: 'Песня', artist: 'А', duration: 180900 }));

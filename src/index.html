@@ -286,6 +286,7 @@ input[type=range]:hover::-webkit-slider-thumb{transform:scale(1.25)}
 .seg button.on{background:var(--a1);color:var(--on-a1)}
 #eqSeg{grid-template-columns:repeat(4,1fr)}
 .ovRow.libRow{justify-content:flex-start}
+.fmIn{display:grid;gap:10px}
 body[data-lite="2"] .backdrop.grad-on.anim .grad{animation:none}
 #expSize{font-weight:600;color:var(--dim)}
 .thumbs{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:8px}
@@ -549,6 +550,10 @@ html.mobile button,html.mobile .song,html.mobile .pl{-webkit-tap-highlight-color
     <label class="chk" id="expRow"><input type="checkbox" id="expFiles"><span></span>Вместе со своими файлами<b id="expSize"></b></label>
     <div class="ovRow libRow"><button class="chipB" id="expBtn">Сохранить в файл</button><button class="chipB" id="impBtn">Открыть файл</button></div>
     <input type="file" id="impFile" accept=".linea" hidden>
+    <h4>Last.fm</h4>
+    <p class="small">Отмечать прослушанное в профиле Last.fm. Нужны свои API key и Shared secret с last.fm/api/account/create — хранятся только на этом устройстве.</p>
+    <div class="fmIn" id="fmIn"><label class="field">API key<input class="find" id="fmKey" spellcheck="false" autocomplete="off"></label><label class="field">Shared secret<input class="find" id="fmSecret" spellcheck="false" autocomplete="off"></label></div>
+    <div class="ovRow"><span class="small" id="fmState"></span><button class="chipB" id="fmBtn">Войти</button></div>
     <h4 class="pcOnly">Discord</h4>
     <p class="small pcOnly">Показывать в профиле Discord, что играет. Создай приложение на discord.com/developers и вставь его Application ID — Discord напишет «Слушает» и название приложения. Пусто — выключено.</p>
     <label class="field pcOnly">Application ID<input class="find" id="dcId" spellcheck="false" placeholder="Только цифры" autocomplete="off" inputmode="numeric"></label>

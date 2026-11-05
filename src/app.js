@@ -787,6 +787,7 @@ function renderBgDlg() {
   $('trayOn').checked = settings.tray !== false;
   $('ytKey').value = settings.ytKey || '';
   $('dcId').value = settings.dcId || '';
+  fmRender();
   updRefresh();
   document.querySelectorAll('#themeSeg button').forEach((b) => b.classList.toggle('on', b.dataset.th === (settings.theme || 'dark')));
   $('sideA').value = settings.sideA || 0.55; $('sideAV').textContent = Math.round((1 - (settings.sideA || 0.55)) * 100) + '%';
@@ -1010,6 +1011,7 @@ async function load(song, autoplay) {
   if (fade) { fadeOut(audio); audio = other; } else other.pause();
   xfading = false;
   cur = song;
+  fmNew(song);
   store.set('ln.last', song.id);
   if (song.kind) {
     if (audio !== net) { audio.pause(); audio = net; }
@@ -2036,6 +2038,86 @@ $('expBtn').addEventListener('click', libSave);
 $('impBtn').addEventListener('click', () => $('impFile').click());
 $('impFile').addEventListener('change', (e) => { if (e.target.files[0]) libImport(e.target.files[0]); e.target.value = ''; });
 if (window.lnApp && window.lnApp.mobile) $('impFile').removeAttribute('accept'); // Android не знает тип .linea и не показал бы файл
+
+// ==================== Last.fm: отмечать прослушанное ====================
+// ключ и секрет — свои, с last.fm/api/account/create, хранятся только здесь. Что не ушло (нет сети) — ждёт в очереди
+const FM = 'https://ws.audioscrobbler.com/2.0/';
+const fmQ = store.get('ln.fmq', []);
+let fmT = null, fmBusy = false;
+async function fmCall(method, params, post) {
+  const p = { ...params, method, api_key: settings.fmKey };
+  if (post) p.sk = settings.fmSk;
+  p.api_sig = fmSig(p, settings.fmSecret);
+  const body = new URLSearchParams({ ...p, format: 'json' });
+  const r = await fetch(post ? FM : `${FM}?${body}`, post ? { method: 'POST', body } : undefined);
+  const j = await r.json().catch(() => null);
+  if (!j || j.error) throw Object.assign(new Error((j && j.message) || 'Last.fm не ответил'), { code: j && j.error });
+  return j;
+}
+function fmRender() {
+  $('fmKey').value = settings.fmKey || ''; $('fmSecret').value = settings.fmSecret || '';
+  $('fmIn').hidden = !!settings.fmSk;
+  $('fmState').textContent = settings.fmSk ? `Подключено: ${settings.fmUser}` : '';
+  $('fmBtn').textContent = settings.fmSk ? 'Выйти' : 'Войти';
+}
+async function fmLogin() {
+  settings.fmKey = $('fmKey').value.trim(); settings.fmSecret = $('fmSecret').value.trim(); saveSettings();
+  if (!settings.fmKey || !settings.fmSecret) { toast('Вставь API key и Shared secret'); return; }
+  let token = '';
+  try { token = (await fmCall('auth.getToken', {})).token; } catch (e) { toast(e.code ? 'Last.fm не принял ключ или секрет' : 'Last.fm не ответил'); return; }
+  window.open(`https://www.last.fm/api/auth/?api_key=${encodeURIComponent(settings.fmKey)}&token=${encodeURIComponent(token)}`, '_blank');
+  $('fmState').textContent = 'Разреши доступ на странице Last.fm — Linea подождёт';
+  for (let k = 0; k < 100; k++) { // до 5 минут
+    await new Promise((r) => setTimeout(r, 3000));
+    try {
+      const { session } = await fmCall('auth.getSession', { token });
+      Object.assign(settings, { fmSk: session.key, fmUser: session.name }); saveSettings();
+      fmRender(); toast('Last.fm подключён'); fmFlush();
+      return;
+    } catch (e) { if (e.code !== 14) break; } // 14 — ещё не разрешили
+  }
+  fmRender();
+}
+async function fmFlush() {
+  if (!settings.fmSk || fmBusy || !fmQ.length) return;
+  fmBusy = true;
+  try {
+    while (fmQ.length) { // по 50 за раз — больше Last.fm не берёт
+      const part = fmQ.slice(0, 50), p = {};
+      part.forEach((x, i) => Object.assign(p, { [`artist[${i}]`]: x.a, [`track[${i}]`]: x.t, [`timestamp[${i}]`]: x.ts, [`duration[${i}]`]: x.d }));
+      await fmCall('track.scrobble', p, true);
+      fmQ.splice(0, part.length); store.set('ln.fmq', fmQ);
+    }
+  } catch (e) {
+    if (e.code === 9) { settings.fmSk = ''; saveSettings(); fmRender(); toast('Last.fm: войди заново'); } // доступ отозвали
+  } finally { fmBusy = false; }
+}
+// время слушания копим сами: перемотка вперёд не в счёт
+function fmNew(song) { fmT = { s: song, at: -1, got: 0, ts: 0, done: false }; }
+const fmDur = () => Math.round(audio.duration > 0 && isFinite(audio.duration) ? audio.duration : (cur.duration || 0) / 1000);
+onDeck('timeupdate', () => {
+  if (!settings.fmSk || !fmT || fmT.s !== cur || !cur.artist || audio.paused) return;
+  const t = audio.currentTime, dur = fmDur();
+  if (fmT.done && t < 1 && fmT.at > 5) fmNew(cur); // песня пошла на повтор — новое прослушивание
+  if (!fmT.ts) { // начали слушать — «сейчас играет» в профиле
+    fmT.ts = Math.round(Date.now() / 1000);
+    fmCall('track.updateNowPlaying', { artist: cur.artist, track: cur.name, ...(dur ? { duration: dur } : {}) }, true).catch(() => {});
+  }
+  if (fmT.at >= 0 && t > fmT.at && t - fmT.at < 2) fmT.got += t - fmT.at;
+  fmT.at = t;
+  if (fmT.done || fmT.got < fmNeed(dur)) return;
+  fmT.done = true;
+  fmQ.push({ a: cur.artist, t: cur.name, ts: fmT.ts, d: dur });
+  if (fmQ.length > 2000) fmQ.splice(0, fmQ.length - 2000);
+  store.set('ln.fmq', fmQ);
+  fmFlush();
+});
+$('fmBtn').addEventListener('click', () => {
+  if (!settings.fmSk) { fmLogin(); return; }
+  settings.fmSk = settings.fmUser = ''; saveSettings(); fmRender();
+});
+addEventListener('online', fmFlush);
+setTimeout(fmFlush, 15000);
 
 // ==================== старт ====================
 (async () => {
