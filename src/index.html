@@ -286,6 +286,10 @@ input[type=range]:hover::-webkit-slider-thumb{transform:scale(1.25)}
 .seg button.on{background:var(--a1);color:var(--on-a1)}
 #eqSeg{grid-template-columns:repeat(4,1fr)}
 .ovRow.libRow{justify-content:flex-start}
+.aboutRow{flex-wrap:wrap}
+.about{display:flex;align-items:center;gap:12px}
+.about img{width:52px;height:52px;object-fit:contain}
+.about b{font:20px var(--display)}
 .fmIn{display:grid;gap:10px}
 body[data-lite="2"] .backdrop.grad-on.anim .grad{animation:none}
 #expSize{font-weight:600;color:var(--dim)}
@@ -557,8 +561,9 @@ html.mobile button,html.mobile .song,html.mobile .pl{-webkit-tap-highlight-color
     <h4 class="pcOnly">Discord</h4>
     <p class="small pcOnly">Показывать в профиле Discord, что играет. Создай приложение на discord.com/developers и вставь его Application ID — Discord напишет «Слушает» и название приложения. Пусто — выключено.</p>
     <label class="field pcOnly">Application ID<input class="find" id="dcId" spellcheck="false" placeholder="Только цифры" autocomplete="off" inputmode="numeric"></label>
-    <h4>Обновления</h4>
-    <div class="ovRow"><span id="verTxt">Версия</span><button class="chipB" id="updChk">Проверить</button></div>
+    <h4>О Linea</h4>
+    <div class="ovRow aboutRow"><div class="about"><img id="aboutIco" src="icons/grey.png" alt=""><div><b>Linea</b><div class="small" id="verTxt">Версия</div><div class="small">Сделал Vegas · VegasDev</div></div></div><button class="chipB" id="updChk">Проверить обновления</button></div>
+    <div class="ovRow libRow aboutRow"><button class="chipB" id="aboutTg">Telegram</button><button class="chipB" id="aboutGh">GitHub</button><button class="chipB" id="aboutDon" hidden>Поддержать</button><button class="chipB" id="aboutBug">Сообщить о баге</button></div>
     <p class="keys"><kbd>←</kbd> <kbd>→</kbd> песни · <kbd>Пробел</kbd> пауза · <kbd>↑</kbd> <kbd>↓</kbd> громкость · <kbd>PgDn</kbd> играть · <kbd>PgUp</kbd> стоп · <kbd>Esc</kbd> закрыть</p>
     <div class="acts"><button class="main" id="bgClose">Готово</button></div>
   </div>

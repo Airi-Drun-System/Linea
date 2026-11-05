@@ -1778,6 +1778,7 @@ setInterval(() => vSync(false), 1000);
 function applyLook() {
   const ic = `icons/${settings.icon || 'grey'}.png`;
   document.querySelector('.brandBtn img').src = ic;
+  $('aboutIco').src = ic;
   if (!cur) $('coverImg').src = ic;
   document.documentElement.style.setProperty('--lyr-scale', settings.lyrScale || 1);
   if (window.lnApp && window.lnApp.prefs) window.lnApp.prefs({ icon: settings.icon || 'grey', tray: settings.tray !== false, trayTold: !!settings.trayTold });
@@ -1832,6 +1833,17 @@ $('updGo').addEventListener('click', () => window.lnApp && window.lnApp.updInsta
 $('updLater').addEventListener('click', () => { $('updBar').hidden = true; toast('Обновление поставится, когда выйдешь из Linea'); });
 $('updChk').addEventListener('click', async () => { toast('Проверяю обновления…'); await window.lnApp.updCheck().catch(() => {}); setTimeout(updRefresh, 4000); });
 updRefresh();
+
+// ==================== о Linea ====================
+// ссылка DonationAlerts для кнопки «Поддержать»; пусто — кнопки нет
+const DONATE = '';
+const GH = 'https://github.com/Airi-Drun-System/Linea';
+for (const [id, url] of [['aboutTg', 'https://t.me/CabbitJumpNews'], ['aboutGh', GH], ['aboutDon', DONATE]]) {
+  $(id).hidden = !url;
+  $(id).addEventListener('click', () => window.open(url, '_blank'));
+}
+// версия и устройство сразу в тексте бага — иначе первым вопросом будет «а какая у тебя версия?»
+$('aboutBug').addEventListener('click', () => window.open(`${GH}/issues/new?body=` + encodeURIComponent(`${$('verTxt').textContent}, ${window.lnApp && window.lnApp.mobile ? 'Android' : 'ПК'}\n\nЧто случилось:\n`), '_blank'));
 // ==================== кадр: перемотка, бас, строка ====================
 // автокачество: кадры не успевают — 1: обычное стекло и вдвое меньше частиц, 2: без частиц, градиент стоит,
 // видео-фон заменяет обложка. Меряем, только когда Linea в фокусе (игра рядом не в счёт), и не в первые секунды запуска.

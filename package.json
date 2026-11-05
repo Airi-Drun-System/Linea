@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "description": "Linea",
   "author": "VegasDev",
+  "homepage": "https://github.com/Airi-Drun-System/Linea",
   "license": "UNLICENSED",
   "main": "main.js",
   "scripts": {
@@ -21,6 +22,7 @@
   "build": {
     "appId": "com.vegasdev.linea",
     "productName": "Linea",
+    "copyright": "© 2026 VegasDev",
     "icon": "build/icon.png",
     "files": [
       "main.js",

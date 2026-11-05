@@ -40,7 +40,7 @@ function createWindow() {
   win.webContents.setWindowOpenHandler(({ url }) => {
     // «Войти» из плеера YouTube — в окне самой Linea: вход должен остаться в её куках, иначе плеер так и будет просить войти
     if (/^https:\/\/accounts\.google\.com\/|^https:\/\/(www\.)?youtube\.com\/(signin|ServiceLogin)/.test(url)) openBrowse(url);
-    else if (/^https:\/\/([a-z0-9-]+\.)?(youtube\.com|youtu\.be|soundcloud\.com|last\.fm)\//.test(url)) shell.openExternal(url);
+    else if (/^https:\/\/([a-z0-9-]+\.)?(youtube\.com|youtu\.be|soundcloud\.com|last\.fm|t\.me|github\.com|donationalerts\.com)\//.test(url)) shell.openExternal(url);
     return { action: 'deny' };
   });
   win.webContents.on('will-navigate', (e) => e.preventDefault());
