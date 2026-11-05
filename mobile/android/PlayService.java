@@ -98,12 +98,16 @@ public class PlayService extends Service {
         else startForeground(1, n);
         // на паузе отпускаем: уведомление можно смахнуть, телефон не держит Linea зря
         if (!playing) ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_DETACH);
+        LineaWidget.show(this, title, artist, playing, art);
         return START_NOT_STICKY;
     }
 
     @Override
     public void onDestroy() {
         if (session != null) { session.release(); session = null; }
+        // Linea закрыли — плеер в шторке и на виджете больше ничем не управляет
+        ((NotificationManager) getSystemService(NOTIFICATION_SERVICE)).cancel(1);
+        LineaWidget.show(this, null, null, false, null);
         super.onDestroy();
     }
 

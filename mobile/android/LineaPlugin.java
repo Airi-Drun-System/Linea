@@ -109,6 +109,13 @@ public class LineaPlugin extends Plugin {
         }
     }
 
+    // окно закрыли — вместе с ним закрылись страница и музыка
+    @Override
+    protected void handleOnDestroy() {
+        if (inst == this) inst = null;
+        getContext().stopService(new Intent(getContext(), PlayService.class));
+    }
+
     @PluginMethod
     public void minimize(PluginCall call) {
         if (getActivity() != null) getActivity().moveTaskToBack(true);

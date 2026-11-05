@@ -1,12 +1,11 @@
 'use strict';
-// после «npx cap add android»: свой код Android, разрешения, «Поделиться», номер версии
+// после «npx cap add android»: свой код Android, разрешения, «Поделиться», виджет, номер версии
 const fs = require('fs'), path = require('path');
 const root = path.join(__dirname, '..'), app = path.join(root, 'android', 'app');
 const src = path.join(__dirname, 'android'), java = path.join(app, 'src', 'main', 'java', 'com', 'vegasdev', 'linea');
-for (const f of ['MainActivity.java', 'LineaPlugin.java', 'PlayService.java']) fs.copyFileSync(path.join(src, f), path.join(java, f));
-const draw = path.join(app, 'src', 'main', 'res', 'drawable');
-fs.mkdirSync(draw, { recursive: true });
-fs.copyFileSync(path.join(src, 'ic_stat_linea.xml'), path.join(draw, 'ic_stat_linea.xml'));
+for (const f of ['MainActivity.java', 'LineaPlugin.java', 'PlayService.java', 'LineaWidget.java']) fs.copyFileSync(path.join(src, f), path.join(java, f));
+// значок для шторки и виджет: mobile/android/res ложится поверх res проекта
+fs.cpSync(path.join(src, 'res'), path.join(app, 'src', 'main', 'res'), { recursive: true });
 
 const must = (s, what) => { if (!s) throw new Error('не нашлось: ' + what); return s; };
 const mf = path.join(app, 'src', 'main', 'AndroidManifest.xml');
@@ -21,7 +20,13 @@ const share = `            <intent-filter>
                 <data android:mimeType="text/plain" />
             </intent-filter>
         </activity>
-        <service android:name=".PlayService" android:exported="false" android:foregroundServiceType="mediaPlayback" />`;
+        <service android:name=".PlayService" android:exported="false" android:foregroundServiceType="mediaPlayback" />
+        <receiver android:name=".LineaWidget" android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/linea_widget_info" />
+        </receiver>`;
 must(m.includes('</activity>'), 'activity');
 m = m.replace('</activity>', share);
 fs.writeFileSync(mf, m);
