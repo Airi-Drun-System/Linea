@@ -9,6 +9,11 @@ const store = {
 const settings = Object.assign({ volume: 0.8 }, store.get('ln.settings', {}));
 const saveSettings = () => store.set('ln.settings', settings);
 if (window.lnApp && window.lnApp.mobile && !settings.glass) settings.glass = 'plain'; // жидкое стекло слишком тяжёлое для телефона
+// слабые устройства: насколько упрощена картинка (0–2, см. «кадр»). Телефон сразу полегче; при запуске пробуем
+// на ступень богаче прошлого раза — случайные тормоза (игра, тяжёлый «Минус») не остаются навсегда
+const LITE_MIN = window.lnApp && window.lnApp.mobile ? 1 : 0;
+let lite = Math.max(LITE_MIN, store.get('ln.lite', 0) - 1);
+document.body.dataset.lite = lite;
 
 // песни лежат в IndexedDB вместе с файлом: библиотека переживает перезапуск
 const DB = (() => {
@@ -770,6 +775,7 @@ function renderBgDlg() {
   $('gAnim').checked = !!BG.anim;
   $('bgReact').checked = !!BG.react;
   $('glassSel').value = settings.glass || 'liquid';
+  $('liteRow').hidden = lite <= LITE_MIN;
   $('xfSel').value = String(settings.xfade || 0);
   document.querySelectorAll('#eqSeg button').forEach((b) => b.classList.toggle('on', Number(b.dataset.eq) === (settings.eq || 0)));
   $('normOn').checked = settings.norm !== false;
@@ -853,6 +859,7 @@ $('bgSongFile').addEventListener('change', (e) => {
   saveSong(cur); applyBg(); renderBgDlg();
 });
 $('glassSel').addEventListener('change', () => { settings.glass = $('glassSel').value; saveSettings(); lgRefresh(); });
+$('liteOff').addEventListener('click', () => { liteSet(LITE_MIN); renderBgDlg(); });
 $('xfSel').addEventListener('change', () => { settings.xfade = Number($('xfSel').value); saveSettings(); });
 document.querySelectorAll('#eqSeg button').forEach((b) => b.addEventListener('click', () => { settings.eq = Number(b.dataset.eq); saveSettings(); soundFx(); renderBgDlg(); }));
 $('normOn').addEventListener('change', () => { settings.norm = $('normOn').checked; saveSettings(); soundFx(); });
@@ -907,11 +914,12 @@ function lgApply(el) {
     <feColorMatrix in="rgb" type="saturate" values="1.45"/>`;
   el.style.backdropFilter = `url(#${rec.id})`;
 }
-const lgRO = new ResizeObserver((es) => { if (settings.glass === 'plain') return; es.forEach((e) => lgApply(e.target)); });
+const liquid = () => settings.glass !== 'plain' && lite < 1;
+const lgRO = new ResizeObserver((es) => { if (!liquid()) return; es.forEach((e) => lgApply(e.target)); });
 const LG_SEL = '.step, .card, .menu';
-function lgWatch(el) { el.classList.add('lg'); lgRO.observe(el); if (settings.glass !== 'plain') lgApply(el); }
+function lgWatch(el) { el.classList.add('lg'); lgRO.observe(el); if (liquid()) lgApply(el); }
 function lgRefresh() {
-  const on = settings.glass !== 'plain';
+  const on = liquid();
   document.body.classList.toggle('liquid', on);
   document.querySelectorAll(LG_SEL).forEach((el) => {
     if (on) { lgEls.delete(el); lgWatch(el); } else { el.style.backdropFilter = ''; }
@@ -1692,7 +1700,7 @@ function fxResize() {
   fxCv.width = Math.round(fxW * dpr); fxCv.height = Math.round(fxH * dpr);
   fxG.setTransform(dpr, 0, 0, dpr, 0, 0);
   // количество от площади окна: на большом экране не пусто, на маленьком не каша
-  const n = Math.round(Math.min(180, (fxW * fxH) / 9000));
+  const n = lite > 1 ? 0 : Math.round(Math.min(180, (fxW * fxH) / 9000) / (lite ? 2 : 1));
   fxParts = Array.from({ length: n }, () => fxNew(true));
 }
 function fxNew(anywhere) {
@@ -1705,7 +1713,7 @@ function fxFrame(now) {
   const dt = Math.min(0.05, (now - fxLast) / 1000);
   fxLast = now;
   fxG.clearRect(0, 0, fxW, fxH);
-  if (mode === 'off') return;
+  if (mode === 'off' || !fxParts.length) return;
   const boost = 1 + kick * 1.8; // на ударах баса частицы чуть ускоряются и ярче
   const col = mode === 'dust' ? getComputedStyle(document.documentElement).getPropertyValue('--a1').trim() || '#fff' : themeNow() === 'light' ? `rgb(${fgRGB()})` : '#fff';
   fxG.fillStyle = col;
@@ -1747,7 +1755,7 @@ function videoFrame(file) {
 }
 let vUrl = '';
 function bgVideo() {
-  const v = $('bgV'), on = !!cur && isVideoFile(cur.blob) && settings.videoBg !== false;
+  const v = $('bgV'), on = !!cur && isVideoFile(cur.blob) && settings.videoBg !== false && lite < 2;
   v.classList.toggle('show', on);
   if (!on) { v.pause(); if (vUrl) { URL.revokeObjectURL(vUrl); vUrl = ''; v.removeAttribute('src'); v.dataset.id = ''; } return false; }
   if (v.dataset.id !== cur.id) { if (vUrl) URL.revokeObjectURL(vUrl); vUrl = URL.createObjectURL(cur.blob); v.src = vUrl; v.dataset.id = cur.id; }
@@ -1823,9 +1831,22 @@ $('updLater').addEventListener('click', () => { $('updBar').hidden = true; toast
 $('updChk').addEventListener('click', async () => { toast('Проверяю обновления…'); await window.lnApp.updCheck().catch(() => {}); setTimeout(updRefresh, 4000); });
 updRefresh();
 // ==================== кадр: перемотка, бас, строка ====================
+// автокачество: кадры не успевают — 1: обычное стекло и вдвое меньше частиц, 2: без частиц, градиент стоит,
+// видео-фон заменяет обложка. Меряем, только когда Linea в фокусе (игра рядом не в счёт), и не в первые секунды запуска.
+// Музыку это не трогает: звук играет отдельно от картинки
+const fpsW = { t: 0, n: 0, s: 0, bad: 0 };
+let frameLast = 0, kickS = '';
+function liteSet(v) {
+  lite = v; store.set('ln.lite', v); document.body.dataset.lite = v;
+  lgRefresh(); fxResize(); applyBg();
+}
 function frame(now) {
   requestAnimationFrame(frame);
-  fxFrame(now || performance.now());
+  now = now || performance.now();
+  const dt = now - frameLast;
+  frameLast = now;
+  if (lite < 2 && now > 8000 && document.hasFocus() && fpsSlow(fpsW, dt)) { liteSet(lite + 1); toast('Упрощаю эффекты, чтобы не тормозило'); }
+  fxFrame(now);
   const t = audio.currentTime * 1000;
   if (!seeking && cur) {
     const v = audio.duration ? audio.currentTime / audio.duration : 0;
@@ -1841,7 +1862,9 @@ function frame(now) {
     bassAvg += (b - bassAvg) * 0.04;
     kick = Math.max(Math.min(1, (b - bassAvg) * 5), kick * 0.86);
   } else kick *= 0.86;
-  document.documentElement.style.setProperty('--kick', kick.toFixed(3));
+  // бас — только обложке и фону: переменная на всём документе пересчитывала бы стили всей страницы каждый кадр
+  const k = kick.toFixed(3);
+  if (k !== kickS) { kickS = k; $('backdrop').style.setProperty('--kick', k); document.querySelector('.cover').style.setProperty('--kick', k); }
 
   drawWave();
   const L = lyricsOf(cur), els = $('lines').children;

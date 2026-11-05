@@ -202,8 +202,22 @@ async function lrclibFind(getJson, q) {
     return plain ? { plain } : null;
   } catch { return null; }
 }
+// слабые устройства: кадры копим окнами по 2 с; если в двух окнах подряд больше половины кадров дольше 22 мс
+// (меньше 45 в секунду) — пора упрощать картинку. Половина, а не среднее: одна заминка (декодируем файл) — не тормоза.
+// Промежутки от секунды (окно свёрнуто, телефон спит) не считаем вовсе
+function fpsSlow(w, dt) {
+  if (!(dt > 0 && dt < 1000)) return false;
+  w.t += dt; w.n++;
+  if (dt > 22.2) w.s++;
+  if (w.t < 2000) return false;
+  w.bad = w.s * 2 > w.n ? w.bad + 1 : 0;
+  w.t = w.n = w.s = 0;
+  if (w.bad < 2) return false;
+  w.bad = 0;
+  return true;
+}
 // перенос .linea: свой файл на другом устройстве получает другой id (в нём дата файла), поэтому дубль узнаём
 // и по названию, исполнителю и длине; песни по ссылке пускаем только с настоящим адресом YouTube или SoundCloud
 const sameSong = (a, b) => a.id === b.id || (!a.kind && !b.kind && a.name === b.name && (a.artist || '') === (b.artist || '') && Math.abs((a.duration || 0) - (b.duration || 0)) < 1500);
 const netOk = (r) => (r.kind === 'yt' ? /^[\w-]{11}$/.test(r.vid) : r.kind === 'sc' ? /^https:\/\/([a-z0-9-]+\.)?soundcloud\.com\//.test(r.url) : !r.kind);
-if (typeof module !== 'undefined') module.exports = { lrclibFind, hashStr, rng, fmtDur, cleanName, parseLRC, lineAt, retextLine, peaks, voiceEnv, autoLyrics, loudness, normDb, sameSong, netOk, parseNetUrl, splitTitle };
+if (typeof module !== 'undefined') module.exports = { lrclibFind, hashStr, rng, fmtDur, cleanName, parseLRC, lineAt, retextLine, peaks, voiceEnv, autoLyrics, loudness, normDb, fpsSlow, sameSong, netOk, parseNetUrl, splitTitle };

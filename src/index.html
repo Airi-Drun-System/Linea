@@ -286,6 +286,7 @@ input[type=range]:hover::-webkit-slider-thumb{transform:scale(1.25)}
 .seg button.on{background:var(--a1);color:var(--on-a1)}
 #eqSeg{grid-template-columns:repeat(4,1fr)}
 .ovRow.libRow{justify-content:flex-start}
+body[data-lite="2"] .backdrop.grad-on.anim .grad{animation:none}
 #expSize{font-weight:600;color:var(--dim)}
 .thumbs{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:8px}
 .thumb{position:relative;aspect-ratio:16/10;border-radius:12px;background:center/cover rgb(var(--bg-rgb));overflow:hidden}
@@ -539,6 +540,7 @@ html.mobile button,html.mobile .song,html.mobile .pl{-webkit-tap-highlight-color
     <label class="chk pcOnly"><input type="checkbox" id="keysG"><span></span>Клавиши ← → (песни), PgDn (играть) и PgUp (стоп) работают везде, даже в других программах и играх</label>
     <div class="ovRow pcOnly"><label class="chk"><input type="checkbox" id="ovOn"><span></span>Слова поверх игр</label><button class="chipB" id="ovMove" hidden>Подвинуть</button></div>
     <label class="field">Стекло<select id="glassSel"><option value="liquid">Жидкое: преломляет фон, как линза</option><option value="plain">Обычное: размытое, легче для слабых компьютеров</option></select></label>
+    <div class="ovRow" id="liteRow" hidden><span class="small">Эффекты упрощены: кадры не успевали</span><button class="chipB" id="liteOff">Вернуть</button></div>
     <h4>Поиск</h4>
     <p class="small">Поиск песен прямо в Linea идёт через YouTube. Нужен твой бесплатный ключ YouTube Data API: он хранится только на этом устройстве.</p>
     <div class="ovRow"><input class="find" id="ytKey" spellcheck="false" placeholder="Ключ, начинается с AIza…" autocomplete="off"><button class="chipB" id="ytKeyChk">Проверить</button></div>

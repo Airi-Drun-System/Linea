@@ -1,6 +1,6 @@
 'use strict';
 const assert = require('assert');
-const { parseLRC, lineAt, fmtDur, cleanName, retextLine, peaks, voiceEnv, autoLyrics, loudness, normDb, sameSong, netOk, parseNetUrl, splitTitle, lrclibFind } = require('../src/lib.js');
+const { parseLRC, lineAt, fmtDur, cleanName, retextLine, peaks, voiceEnv, autoLyrics, loudness, normDb, fpsSlow, sameSong, netOk, parseNetUrl, splitTitle, lrclibFind } = require('../src/lib.js');
 
 const L = parseLRC('[ar:x]\n[00:01.50]раз\n[00:00.20][00:03.00]два\nбез метки\n[01:02.5]три');
 assert.deepStrictEqual(L.map((l) => [Math.round(l.t), l.text]), [[200, 'два'], [1500, 'раз'], [3000, 'два'], [62500, 'три']]);
@@ -81,6 +81,18 @@ assert.strictEqual(normDb(-20, -8), 6);
 assert.strictEqual(normDb(-20, -1), 0);
 assert.strictEqual(normDb(-17, -6), 3);
 assert.strictEqual(normDb(0, 0), -12);
+// автокачество: 60 кадров/с — никогда, даже с заминкой раз в секунду; 30 — через 4 с и потом каждые 4 с; 3 — тоже тормоза;
+// тормоза через окно — нет; сон окна — не тормоза
+const fps = (list) => { const w = { t: 0, n: 0, s: 0, bad: 0 }, at = []; let t = 0; for (const dt of list) { t += dt; if (fpsSlow(w, dt)) at.push(Math.round(t / 1000)); } return at; };
+const run = (f, sec) => new Array(Math.round(f * sec)).fill(1000 / f);
+assert.deepStrictEqual(fps(run(60, 20)), []);
+assert.deepStrictEqual(fps(run(30, 13)), [4, 8, 12]);
+assert.deepStrictEqual(fps([...run(30, 2), ...run(60, 2), ...run(30, 2), ...run(60, 2)]), []);
+assert.deepStrictEqual(fps(new Array(30).fill(1000)), []);
+assert.deepStrictEqual(fps(new Array(10).fill([...run(60, 1), 600]).flat()), []);
+assert.deepStrictEqual(fps(run(3, 13)), [5, 9]);
+assert.deepStrictEqual(fps(run(44, 4.1)).length, 1);
+assert.deepStrictEqual(fps(run(46, 10)), []);
 // перенос: свой файл с другим id, но тем же названием и длиной — дубль; ссылки — только настоящие
 const own = { id: 'f1', name: 'Песня', artist: 'А', duration: 180000 };
 assert.ok(sameSong(own, { id: 'f2', name: 'Песня', artist: 'А', duration: 180900 }));
